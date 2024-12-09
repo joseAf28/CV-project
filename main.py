@@ -71,4 +71,3 @@ if __name__ == "__main__":
     
     imageio.imwrite(f'images/track_coordinates_maps_all.jpg', image_all_combined_map)
     imageio.imwrite(f'images/track_coordinates_video_all.jpg', image_all_combined_video)
-    

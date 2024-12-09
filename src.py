@@ -61,24 +61,10 @@ def load_yolo(directory_path):
 
 
 
-def coordinates2image(track_coordinates, card, color):
+def coordinates2image(track_coordinates, card, color=[255, 255, 255]):
     
     width, height = card
-
     track_coordinates_int = track_coordinates.astype(int)
-
-    # # background white, track black
-    # size = 10
-    # image = 255*np.ones((height, width, 3), dtype=np.uint8)
-    # for i in range(len(track_coordinates_int)):
-    #     x = track_coordinates_int[i][0]
-    #     y = track_coordinates_int[i][1]
-    #     # image[y, x] = 0
-    #     # image[y-size:y+size, x-size:x+size] = 0
-        
-    #     image[:, x-size:x+size] = 0
-    #     image[y-size:y+size, :] = 0
-    
     
     # size = 10
     image = np.zeros((height, width, 3), dtype=np.uint8)
