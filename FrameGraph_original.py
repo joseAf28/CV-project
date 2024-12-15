@@ -1,0 +1,206 @@
+import numpy as np
+import scipy
+from scipy.spatial import Delaunay
+import algorithms as alg
+
+
+print_flag = False
+
+
+def load_keypoints(file_path):
+    data = scipy.io.loadmat(file_path)
+    kp = data['kp']  #Keypoints (Nx2 matrix)
+    desc = data['desc']  # Descritores(NxD matrix)
+    return kp, desc
+
+
+
+##! FrameNode class
+class FrameNode:
+    
+    def __init__(self, frame_id, keypoints, descriptors):
+        self.frame_id = frame_id
+        self.keypoints = keypoints
+        self.descriptors = descriptors
+        
+        self.inliers = {} # key: frame_id, value: inliers
+        self.stats = {} # key: frame_id, value: stats
+        self.connections = {} # key: frame_id, value: homographyxw
+    
+    
+    def __repr__(self):
+        return f"FrameNode({self.frame_id}) with {len(self.keypoints)} keypoints"
+    
+    
+    def add_connection(self, frame_id, inlier_indices, homography, stats):
+        
+        self.inliers[frame_id] = inlier_indices
+        self.connections[frame_id] = homography
+        self.stats[frame_id] = stats
+        self.connections[frame_id] = homography
+
+
+
+##! Initialize the graph
+def initialize_graph(frames_path):
+    
+    nodes = np.zeros(len(frames_path), dtype=FrameNode)
+    
+    for i, frame in enumerate(frames_path):
+        kp, desc = load_keypoints(frame)
+        nodes[i] = FrameNode(i, kp, desc)
+    
+    return nodes
+
+
+
+##! Compute the edges
+def compute_edges(nodes, threshold=0.25):
+    
+    for i in range(len(nodes) - 1):
+        
+        j = i + 1
+        
+        matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, threshold)
+        best_inliers, stats = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
+        kp1 = nodes[i].keypoints[best_inliers[:, 0]]
+        kp2 = nodes[j].keypoints[best_inliers[:, 1]]
+        
+        H = alg.getPerspectiveTransform(kp1, kp2)
+        H_inv = alg.getPerspectiveTransform(kp2, kp1)
+        
+        
+        nodes[i].add_connection(j, best_inliers, H, stats)
+        nodes[j].add_connection(i, best_inliers, H_inv, stats)
+    
+    
+    return nodes
+
+
+
+def compute_proximity_edges(nodes, num_neighbors=3):
+
+    centroids = [np.mean(node.keypoints, axis=0) for node in nodes]  # Centroids of keypoints
+    distances = scipy.spatial.distance_matrix(centroids, centroids)  # Compute distance between frames
+    
+    ### computed edges based on the matching optional algorithm
+    
+    for i in range(len(nodes)):
+        nearest_neighbors = np.argsort(distances[i])[1:num_neighbors + 1]  # Exclude self (dist = 0)
+        for j in nearest_neighbors:
+            if i != j:                
+                
+                matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, threshold)
+                results = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
+                H = alg.getPerspectiveTransform(nodes[i].keypoints[results['best_inliers'][:, 0]], nodes[j].keypoints[results['best_inliers'][:, 1]])
+                
+                nodes[i].add_connection(j, results['best_inliers'][:, 0], H, results)
+                nodes[j].add_connection(i, results['best_inliers'][:, 1], np.linalg.inv(H), results)
+
+
+
+def compute_delaunay_edges(nodes, threshold=0.5):
+    
+    
+    centroids = [np.mean(node.keypoints, axis=0) for node in nodes]     # Centroids of keypoints
+    triangulation = Delaunay(centroids)                                 # Perform Delaunay triangulation
+    
+    if print_flag:
+        print("triangulation:", triangulation)
+        print("simplices:", triangulation.simplices)
+        print("shape: ", triangulation.simplices.shape)
+        
+    for simplex in triangulation.simplices:
+        i, j, k = simplex  # Each simplex is a triangle with 3 points
+        for (a, b) in [(i, j), (j, k), (k, i)]:
+            if a != b:
+                
+                matches = alg.matching_optional(nodes[a].descriptors, nodes[b].descriptors, threshold)
+                best_inliers, stats = alg.RANSAC(matches, nodes[a].keypoints, nodes[b].keypoints)
+                H = alg.getPerspectiveTransform(nodes[a].keypoints[best_inliers[:, 0]], nodes[b].keypoints[best_inliers[:, 1]])
+                
+                nodes[a].add_connection(b, best_inliers[:, 0], H, stats)
+                nodes[b].add_connection(a, best_inliers[:, 1], np.linalg.inv(H), stats)
+        
+        print("simplex:", simplex)
+        
+    return nodes
+
+
+
+##! search in the graph to find the best path
+def bfs_shortest_path(graph, start_node):
+    
+    queue = [start_node]
+    parent = {start_node: None}  # Track the parent of each node
+    while queue:
+        current_node = queue.pop(0)
+        
+        if print_flag:
+            print("current_node:", current_node)
+            print("connections:", graph[current_node].connections)
+            print("neighbors:", graph[current_node].connections.keys())
+            print("parent:", parent)
+            print("queue:", queue)
+            print()
+        
+        
+        for neighbor in graph[current_node].connections.keys():
+            if neighbor not in parent:  # If not visited
+                parent[neighbor] = current_node
+                queue.append(neighbor)
+    return parent
+
+
+def compute_composite_homographies(nodes, reference_index=0):
+    
+    num_nodes = len(nodes)
+    composite_homographies = {reference_index: np.eye(3)}  
+    graph = {i: node for i, node in enumerate(nodes)} 
+
+
+    parent = bfs_shortest_path(graph, reference_index)
+    
+    print("parent: ", parent)
+    
+    ## Accumulate homographies for each frame relative to the reference
+    for frame_id in range(num_nodes):
+        if frame_id == reference_index:
+            continue
+        path = []
+        current_node = frame_id
+        while current_node is not None:
+            path.append(current_node)
+            current_node = parent[current_node]
+        path.reverse()  # Reverse to start from the reference frame
+        
+        # Compute the composite homography for this path
+        H = np.eye(3)
+        H_check_eye = np.eye(3)
+        
+        print("path:", path, "frame_id:", frame_id)
+        
+        for i in range(len(path) - 1):
+            src = path[i]
+            dst = path[i + 1]
+            
+            print("src:", src, "dst:", dst)
+            
+            matches = nodes[dst].inliers[src]
+            kp1 = nodes[src].keypoints[matches[:, 0]]
+            kp2 = nodes[dst].keypoints[matches[:, 1]]
+            
+            H1 = alg.getPerspectiveTransform(kp2, kp1)
+            
+            print("H1 == H:", np.abs(H1 - graph[dst].connections[src]).sum())
+            
+            H = H @ graph[dst].connections[src]
+            H_check_eye = H_check_eye @ H1
+            
+            print("H check eye:", np.abs(H_check_eye - H).sum())
+        
+        print()
+        
+        composite_homographies[frame_id] = H_check_eye
+    
+    return composite_homographies

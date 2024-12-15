@@ -2,10 +2,8 @@ import numpy as np
 import os
 import scipy.io
 import matplotlib.colors as mcolors
-
-
 from PIL import Image
-import numpy as np
+
 
 
 def image_to_matrix(image_path):
@@ -16,10 +14,10 @@ def image_to_matrix(image_path):
     return img_matrix
 
 
+
 def matrix_to_image(matrix, output_path):
     img = Image.fromarray(matrix)  # Converter a matriz numpy de volta para imagem
     img.save(output_path)          # Salvar a imagem
-
 
 
 

@@ -3,6 +3,8 @@ from scipy.io import loadmat
 import src
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cdist
+import time
+import tqdm
 
 def plot_matches(img1, img2, kp1, kp2, matches, max_matches=20):
 
@@ -93,7 +95,7 @@ def match_keypoints_ransac(desc1, desc2, kp1, kp2, threshold=0.25, max_iter=5000
             pt1 = kp1[match[0]]
             pt2 = kp2[match[1]]
             
-           
+            
             pt1_hom = np.append(pt1, 1)  
             transformed_pt = H @ pt1_hom
             transformed_pt /= transformed_pt[2]  
@@ -112,6 +114,9 @@ def match_keypoints_ransac(desc1, desc2, kp1, kp2, threshold=0.25, max_iter=5000
 
 
 
+time_init = time.time()
+
+
 
 # Inicializar o mosaico
 initial_image_path = 'ISRwall/input_1/images/img_0001.jpg'
@@ -128,7 +133,7 @@ for y in range(initial_image.shape[0]):
 src.matrix_to_image(dst, f"final_mosaic.jpg")
 
 H_cumulative = np.eye(3)
-for i in range(8):
+for i in tqdm.tqdm(range(8)):
     kp1, desc1 = load_keypoints(f"ISRwall/input_1/keypoints/kp_000{i+1}.mat")
     kp2, desc2 = load_keypoints(f"ISRwall/input_1/keypoints/kp_000{i+2}.mat")
 
@@ -145,7 +150,7 @@ for i in range(8):
     # Certifique-se de ter as imagens carregadas como arrays numpy
     img1 = src.image_to_matrix(f"ISRwall/input_1/images/img_000{i+1}.jpg")
     img2 = src.image_to_matrix(f"ISRwall/input_1/images/img_000{i+2}.jpg")
-    plot_matches(img1, img2, kp1, kp2, np.array(inliers))
+    # plot_matches(img1, img2, kp1, kp2, np.array(inliers))
     
     # Obter keypoints correspondentes
     matched_kp1 = kp1[matches[:, 0]]
@@ -168,3 +173,8 @@ for i in range(8):
     # Imprimir resultados
     print("Matriz de homografia estimada:")
     print(homography_matrix)
+    
+
+
+time_end = time.time()
+print(f"Tempo total de execução: {time_end - time_init} segundos")
