@@ -88,11 +88,9 @@ def match_keypoints_ransac(desc1, desc2, kp1, kp2, threshold=0.25, max_iter=5000
             pt1 = kp1[match[0]]
             pt2 = kp2[match[1]]
             
-            
             pt1_hom = np.append(pt1, 1)  
             transformed_pt = H @ pt1_hom
             transformed_pt /= transformed_pt[2]  
-            
             
             dist = np.linalg.norm(transformed_pt[:2] - pt2)
             if dist < inlier_threshold:

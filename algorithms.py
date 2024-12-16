@@ -67,12 +67,12 @@ def compute_RANSAC_iterations(epsilon, s=4, p=0.99):
 
 
 
-def RANSAC(matches, kp1, kp2, inlier_threshold=2.0, epsilon_init=0.6, max_iter=1000):
+def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=500):
 
     inlier_threshold = 2.0
     best_inliers = []
     
-    number_iteractions = compute_RANSAC_iterations(epsilon=epsilon_init, s=4, p=0.99)
+    number_iteractions = compute_RANSAC_iterations(epsilon=epsilon_init, s=4, p=0.999)
     counter = 0
     
     print("matches shape: ", matches.shape)
@@ -107,11 +107,12 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=2.0, epsilon_init=0.6, max_iter=1
         # if counter >= number_iteractions:
         #     break
         
-        if counter > 500:
+        if counter > max_iter:
             break
         
         counter += 1
-        
+    # print("counter: ", counter)
+    
     inliers_ratio = len(best_inliers) / len(matches)
     mean_error = np.mean(dists)
     variance_error = np.var(dists)

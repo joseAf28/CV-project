@@ -21,20 +21,6 @@ def matrix_to_image(matrix, output_path):
 
 
 
-# def warp_perspective_full(src, H, dst):
-#     width, height = (20000,10000)
-
-#     for y in range(src.shape[0]):
-#         for x in range(src.shape[1]):
-#             p = H @ [x, y, 1]
-#             px, py = int(p[0] / p[2] + 0.5), int(p[1] / p[2] + 0.5)
-
-#             if 0 <= px+12000 < width and 0 <= py+6000 < height:
-#                 dst[py+6000, px+12000] = src[y, x]
-
-#     return dst
-
-
 ### vectirized version
 def warp_perspective_full(src, H, dst):
     width, height = (20000, 10000)
