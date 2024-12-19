@@ -23,7 +23,7 @@ def matrix_to_image(matrix, output_path):
 
 ### vectirized version
 def warp_perspective_full(src, H, dst):
-    width, height = (20000, 10000)
+    width, height = (2000, 1000)
     
     y_indices, x_indices = np.indices((src.shape[0], src.shape[1]))
     
@@ -39,8 +39,8 @@ def warp_perspective_full(src, H, dst):
     px = np.int32(transformed_coords[0, :] + 0.5)
     py = np.int32(transformed_coords[1, :] + 0.5)
     
-    px += 12000
-    py += 6000
+    # px += 12000
+    # py += 6000
     
     valid_indices = (0 <= px) & (px < width) & (0 <= py) & (py < height)
     

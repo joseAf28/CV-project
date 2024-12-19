@@ -27,8 +27,10 @@ with open("volley/graph1.pkl", "rb") as f:
 #     print()
 
 
+
 ## homographies from the reference frame to all the other frames
-composite_homographies = fg.compute_composite_homographies('gbfs', nodes, reference_index=0)
+composite_homographies = fg.compute_composite_homographies('a' ,nodes, reference_index=0)
+
 
 
 ### obtain the paths of the images
@@ -37,38 +39,17 @@ folder_path = "volley/input"
 
 
 image_extension = ['*.jpg']
-mat_extenstion = ['*.mat']
 
 image_files = []
-mat_files = []
-
 for ext in image_extension:
     image_files.extend(glob.glob(os.path.join(folder_path, ext)))
 
-
-for ext in mat_extenstion:
-    mat_files.extend(glob.glob(os.path.join(folder_path, ext)))
-
 image_files = sorted(image_files)
-mat_files = sorted(mat_files)
-
-
-for i in range(len(image_files)):
-    
-    kp, desc = fg.load_keypoints(mat_files[i])
-    
-    if kp is None or desc is None:
-        iamge_files[i] = None
-
-
-image_files = [x for x in image_files if x is not None]
-
-
 
 initial_image_path = image_files[0]
 images_path = image_files[1:]
 
-images_path = images_path[:450]
+images_path = images_path[:300]
 
 
 initial_image = pt.image_to_matrix(initial_image_path)

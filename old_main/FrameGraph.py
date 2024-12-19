@@ -10,13 +10,9 @@ print_flag = False
 
 def load_keypoints(file_path):
     data = scipy.io.loadmat(file_path)
-    
-    if 'kp' not in data or 'desc' not in data:
-        return None, None
-    else:
-        kp = data['kp']  #Keypoints (Nx2 matrix)
-        desc = data['desc']  # Descritores(NxD matrix)
-        return kp, desc
+    kp = data['kp']  #Keypoints (Nx2 matrix)
+    desc = data['desc']  # Descritores(NxD matrix)
+    return kp, desc
 
 
 
@@ -65,7 +61,7 @@ def initialize_graph(frames_path):
 ###? Compute the edges between the frames using the previous frame
 def compute_edges(nodes, threshold=0.25):
     
-    for i in tqdm.tqdm(range(len(nodes) - 1)):
+    for i in range(len(nodes) - 1):
         
         j = i + 1
         
@@ -172,7 +168,26 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.3, best_inliers
         #     nodes[j].add_connection(i1, best_inliers, H_inv, stats)
         
         
-        # ##? always try the homography to the previous frame
+        # ##? always try the homography to the first frame
+        # if i > 0:
+        #     j = 0
+        #     i1 = i
+            
+        #     matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
+        #     best_inliers, stats = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            
+        #     if len(best_inliers) < best_inliers_threshold:
+        #         continue
+            
+        #     kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
+        #     kp2 = nodes[j].keypoints[best_inliers[:, 1]]
+                
+        #     H = alg.getPerspectiveTransform(kp1, kp2)
+        #     H_inv = alg.getPerspectiveTransform(kp2, kp1)
+                
+        #     nodes[i1].add_connection(j, best_inliers, H, stats)
+        #     nodes[j].add_connection(i1, best_inliers, H_inv, stats)
+            
         if i > 0:
             
             j = i-1
@@ -240,6 +255,66 @@ def compute_delaunay_edges(nodes, threshold=0.5):
 #############! Search in the graph to find the best path
 
 ##! search in the graph to find the best path
+def bfs_shortest_path(graph, start_node):
+    
+    queue = [start_node]
+    parent = {start_node: None}  # Track the parent of each node
+    while queue:
+        current_node = queue.pop(0)
+        
+        if print_flag:
+            print("current_node:", current_node)
+            print("connections:", graph[current_node].connections)
+            print("neighbors:", graph[current_node].connections.keys())
+            print("parent:", parent)
+            print("queue:", queue)
+            print()
+        
+        
+        for neighbor in graph[current_node].connections.keys():
+            if neighbor not in parent:  # If not visited
+                parent[neighbor] = current_node
+                queue.append(neighbor)
+    return parent
+
+
+def compute_composite_homographies_bfs(nodes, reference_index=0):
+    
+    num_nodes = len(nodes)
+    composite_homographies = {reference_index: np.eye(3)}  
+    graph = {i: node for i, node in enumerate(nodes)} 
+
+
+    parent = bfs_shortest_path(graph, reference_index)
+    
+    print("parent: ", parent)
+    
+    ## Accumulate homographies for each frame relative to the reference
+    for frame_id in range(num_nodes):
+        if frame_id == reference_index:
+            continue
+        path = []
+        current_node = frame_id
+        while current_node is not None:
+            path.append(current_node)
+            current_node = parent[current_node]
+        path.reverse()  # Reverse to start from the reference frame
+        
+        # Compute the composite homography for this path
+        H = np.eye(3)
+        print("path:", path, "frame_id:", frame_id)
+        
+        for i in range(len(path) - 1):
+            src = path[i]
+            dst = path[i + 1]
+            
+            H = H @ graph[dst].connections[src]
+        
+        composite_homographies[frame_id] = H
+    
+    return composite_homographies
+
+
 
 
 ###! Using Depth First Search to find all paths
@@ -262,15 +337,18 @@ def dfs_all_paths(graph, start_node, end_node):
     return all_paths
 
 
-###! Compute the composite homographies using GBFS
+###! Compute the composite homographies using Depth First Search
+### Uses the path path that minimizes the mean error of the RANSAC
+###? To be improved later
 
-### search in the graph to find the best path
+
+
 def heuristic(node, neighbor, nodes_data):
     
-    if node == neighbor:
-        return 0
-    
     return nodes_data[node].stats[neighbor]["mean_error"]
+    
+    
+
 
 
 def greedy_best_first_search(graph, start_node, end_node, nodes_data):
@@ -297,53 +375,46 @@ def greedy_best_first_search(graph, start_node, end_node, nodes_data):
     return None
 
 
-def compute_composite_homographies(search_alg, nodes, reference_index=0):
+
+
+def compute_composite_homographies_dfs(nodes, reference_index=0):
     
     num_nodes = len(nodes)
     composite_homographies = {reference_index: np.eye(3)}  
     graph = {i: list(node.connections.keys()) for i, node in enumerate(nodes)} 
 
-    pbar = tqdm.tqdm(total=num_nodes)
 
     for node_id in range(num_nodes):
-        
-        pbar.update(1)
         
         if node_id == reference_index:
             continue
         
-        if search_alg == 'dfs':
-            paths = dfs_all_paths(graph, node_id, reference_index)
-            
-            ## Find the path that minimizes the mean error
-            mean_error_path = []
-            for path in paths:
-                error = 0
-                for i in range(len(path) - 1):
-                    src = path[i]
-                    dst = path[i + 1]
-                    error += nodes[dst].stats[src]["mean_error"]
-                mean_error_path.append(error)
-            
-            if print_flag:
-                print("mean_error_path: ", mean_error_path)
-                print("paths: ", paths)
-                print()
-            
-            min_error_index = np.argmin(mean_error_path)
-            
-            path = paths[min_error_index]
-            
-        elif search_alg == 'gbfs':
-            
-            path = greedy_best_first_search(graph, node_id, reference_index, nodes)
-
-        else:
-            raise ValueError("Invalid search algorithm")    
+        # paths = dfs_all_paths(graph, node_id, reference_index)
         
-        # path = greedy_best_first_search(graph, node_id, reference_index, nodes)
+        # ## Find the path that minimizes the mean error
+        # mean_error_path = []
+        # for path in paths:
+        #     error = 0
+        #     for i in range(len(path) - 1):
+        #         src = path[i]
+        #         dst = path[i + 1]
+        #         error += nodes[dst].stats[src]["mean_error"]
+        #     mean_error_path.append(error)
+        
+        # if print_flag:
+        #     print("mean_error_path: ", mean_error_path)
+        #     print("paths: ", paths)
+        #     print()
+        
+        # min_error_index = np.argmin(mean_error_path)
+        
+        # path = paths[min_error_index]
+        
+        
+        path = greedy_best_first_search(graph, node_id, reference_index, nodes)
+        
         path.reverse()
-        print("path:", path, "node_id:", node_id)
+
         # Compute the composite homography for this path
         H = np.eye(3)
         

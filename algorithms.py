@@ -75,7 +75,6 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=5
     number_iteractions = compute_RANSAC_iterations(epsilon=epsilon_init, s=4, p=0.999)
     counter = 0
     
-    print("matches shape: ", matches.shape)
     if matches.shape[0] < 4:
         return best_inliers, None
     
