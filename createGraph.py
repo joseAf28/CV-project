@@ -44,10 +44,9 @@ keypoints_files = keypoints_files[:450]
 nodes = fg.initialize_graph(keypoints_files)
 
 ##! compute the edges
-# nodes = fg.compute_edges(nodes)
 # nodes = fg.compute_delaunay_edges(nodes)
-nodes = fg.compute_edges(nodes)
-# nodes = fg.compute_proximity_edges(nodes)
+# nodes = fg.compute_edges(nodes)
+nodes = fg.compute_proximity_edges(nodes)
 
 
 for node in nodes:
@@ -56,8 +55,6 @@ for node in nodes:
     print(node.stats)
     print()
 
-
-##! search in the graph to find the best path
 
 
 ##! save the graph

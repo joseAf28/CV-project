@@ -51,7 +51,6 @@ def matching_optional(desc1, desc2, threshold=0.25):
 
 
 ### ransac algorithm
-
 def compute_RANSAC_iterations(epsilon, s=4, p=0.99):
     
     if epsilon == 1:  # Avoid division by zero in case all points are outliers
@@ -78,6 +77,8 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=5
     if matches.shape[0] < 4:
         return best_inliers, None
     
+    best_dists = np.zeros(matches.shape[0])
+    
     while True:
         
         sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
@@ -96,6 +97,7 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=5
         if len(inliers) > len(best_inliers):
             best_inliers = inliers
             
+            best_dists = dists
             epsilon = 1 - len(best_inliers) / len(matches)
             number_iteractions = compute_RANSAC_iterations(epsilon=epsilon, s=4, p=0.99)
             
@@ -110,7 +112,6 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=5
             break
         
         counter += 1
-    # print("counter: ", counter)
     
     inliers_ratio = len(best_inliers) / len(matches)
     mean_error = np.mean(dists)
@@ -120,7 +121,8 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=5
         "inliers_ratio": inliers_ratio,
         "inliers_nb": len(best_inliers),
         "mean_error": mean_error, 
-        "variance_error": variance_error
+        "variance_error": variance_error,
+        "dists_error": np.sum(dists)
         }
         
     return best_inliers, stats

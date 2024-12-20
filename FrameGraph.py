@@ -62,6 +62,25 @@ def initialize_graph(frames_path):
 
 #############! Compute the edges
 
+###? compute the stats for each edge
+def compute_stats(matches, kp1, kp2, H):
+    
+    src_pts_hom = np.column_stack((kp1, np.ones((kp1.shape[0], 1)))).T
+    transformed_pts_hom = (H @ src_pts_hom).T
+    transformed_pts_hom /= transformed_pts_hom[:, 2][:, None]
+
+    dists = np.linalg.norm(transformed_pts_hom[:, :2] - kp2, axis=1)
+    
+    stats = {
+        "inliers_ratio": len(matches) / len(kp1),
+        "mean_error": np.mean(dists), 
+        "variance_error": np.var(dists),
+        "dists_error": np.sum(dists)
+        }
+    
+    return stats
+    
+
 ###? Compute the edges between the frames using the previous frame
 def compute_edges(nodes, threshold=0.25):
     
@@ -121,58 +140,16 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.3, best_inliers
                 H = alg.getPerspectiveTransform(kp1, kp2)
                 H_inv = alg.getPerspectiveTransform(kp2, kp1)
                 
+                stats = compute_stats(matches, kp1, kp2, H)
+                
                 nodes[i].add_connection(j, best_inliers, H, stats)
                 nodes[j].add_connection(i, best_inliers, H_inv, stats)
         
         if print_flag:
             print("i:", i, "nearest_neighbors:", nearest_neighbors)
-            
-        ##? Additional connections in case of no edges (?)
+
         
-        ## if there is no connection between the frames, use the previous frame
-        # no_edges_flag = len(nodes[i].connections) == 0
-        
-        # if no_edges_flag and i > 0:
-            
-        #     if print_flag:
-        #         print("used previous frame")
-                
-        #     j = i - 1
-        #     i1 = i
-        
-        #     matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
-        #     best_inliers, stats = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
-        #     kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
-        #     kp2 = nodes[j].keypoints[best_inliers[:, 1]]
-            
-        #     H = alg.getPerspectiveTransform(kp1, kp2)
-        #     H_inv = alg.getPerspectiveTransform(kp2, kp1)
-            
-        #     nodes[i1].add_connection(j, best_inliers, H, stats)
-        #     nodes[j].add_connection(i1, best_inliers, H_inv, stats)
-        
-        
-        # if no_edges_flag and i < len(nodes) - 1:
-            
-        #     if print_flag:
-        #         print("used next frame")
-                
-        #     j = i + 1
-        #     i1 = i
-        
-        #     matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
-        #     best_inliers, stats = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
-        #     kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
-        #     kp2 = nodes[j].keypoints[best_inliers[:, 1]]
-            
-        #     H = alg.getPerspectiveTransform(kp1, kp2)
-        #     H_inv = alg.getPerspectiveTransform(kp2, kp1)
-            
-        #     nodes[i1].add_connection(j, best_inliers, H, stats)
-        #     nodes[j].add_connection(i1, best_inliers, H_inv, stats)
-        
-        
-        # ##? always try the homography to the previous frame
+        ##? always try the homography to the previous frame
         if i > 0:
             
             j = i-1
@@ -189,7 +166,9 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.3, best_inliers
                 
             H = alg.getPerspectiveTransform(kp1, kp2)
             H_inv = alg.getPerspectiveTransform(kp2, kp1)
-                
+            
+            stats = compute_stats(matches, kp1, kp2, H)
+            
             nodes[i1].add_connection(j, best_inliers, H, stats)
             nodes[j].add_connection(i1, best_inliers, H_inv, stats)
     
@@ -263,7 +242,6 @@ def dfs_all_paths(graph, start_node, end_node):
 
 
 ###! Compute the composite homographies using GBFS
-
 ### search in the graph to find the best path
 def heuristic(node, neighbor, nodes_data):
     
@@ -297,7 +275,38 @@ def greedy_best_first_search(graph, start_node, end_node, nodes_data):
     return None
 
 
-def compute_composite_homographies(search_alg, nodes, reference_index=0):
+
+def k_beam_search(graph, start_node, end_node, nodes_data, k):
+    # Priority queue to store (heuristic cost, current_node, path)
+    beam = [(0, start_node, [start_node])]
+    visited = set()
+
+    while beam:
+        new_beam = []
+        for _, current_node, path in beam:
+            if current_node in visited:
+                continue
+
+            visited.add(current_node)
+
+            if current_node == end_node:
+                return path
+
+            for neighbor in graph.get(current_node, []):
+                if neighbor not in visited:
+                    estimated_cost = heuristic(current_node, neighbor, nodes_data)
+                    heapq.heappush(new_beam, (estimated_cost, neighbor, path + [neighbor]))
+
+        print("new_beam:", new_beam)
+        # Keep only the top K nodes in the beam
+        beam = heapq.nsmallest(k, new_beam)
+
+    return None
+
+
+
+
+def compute_composite_homographies(search_alg, nodes, reference_index=157):
     
     num_nodes = len(nodes)
     composite_homographies = {reference_index: np.eye(3)}  
@@ -338,12 +347,16 @@ def compute_composite_homographies(search_alg, nodes, reference_index=0):
             
             path = greedy_best_first_search(graph, node_id, reference_index, nodes)
 
+        elif search_alg == 'k_beam':
+                
+            path = k_beam_search(graph, node_id, reference_index, nodes, k=5)
+        
         else:
             raise ValueError("Invalid search algorithm")    
         
-        # path = greedy_best_first_search(graph, node_id, reference_index, nodes)
-        path.reverse()
         print("path:", path, "node_id:", node_id)
+        path.reverse()
+        
         # Compute the composite homography for this path
         H = np.eye(3)
         
@@ -354,5 +367,130 @@ def compute_composite_homographies(search_alg, nodes, reference_index=0):
             H = H @ nodes[dst].connections[src]
         
         composite_homographies[node_id] = H
+    
+    
+    
+    
+    return composite_homographies
+
+
+
+
+import heapq
+
+def dijkstra(graph, start_node, end_node):
+    # Priority queue to store (cost, current_node, path)
+    queue = [(0, start_node, [start_node])]
+    visited = set()
+    min_cost = {start_node: 0}
+
+    while queue:
+        current_cost, current_node, path = heapq.heappop(queue)
+
+        if current_node in visited:
+            continue
+
+        visited.add(current_node)
+
+        if current_node == end_node:
+            # return path, current_cost
+            return path
+
+        for neighbor, cost in graph.get(current_node, {}):
+            if neighbor not in visited:
+                new_cost = current_cost + cost
+                if new_cost < min_cost.get(neighbor, float('inf')):
+                    min_cost[neighbor] = new_cost
+                    heapq.heappush(queue, (new_cost, neighbor, path + [neighbor]))
+
+    return None, float('inf')
+
+
+def improved_cost_function(stats, max_tuple):
+
+    # mean_max, var_max, dist_max = max_tuple
+    # mean_error = stats["mean_error"]
+    # var_error = stats["variance_error"]
+    # dists_error = stats["dists_error"]
+    # inlier_ratio = stats["inliers_ratio"]
+
+    # normalized_mean_error = mean_error / mean_max
+    # normalized_max_error = dists_error / dist_max
+    # normalized_inlier_ratio = 1 - inlier_ratio  # High inlier ratio = low cost
+    # normalized_error_variance = var_error / var_max
+
+    # # Weights for multi-objective cost
+    # alpha = 0.4
+    # beta = 0.3
+    # gamma = 0.2
+    # delta = 0.1
+
+    # cost = (alpha * normalized_mean_error + beta * normalized_max_error +
+    #         gamma * normalized_inlier_ratio + delta * normalized_error_variance)
+    
+    # return cost
+    return stats["mean_error"]
+
+
+
+
+def compute_composite_homographies_2(search_alg, nodes, reference_index=0):
+    
+    num_nodes = len(nodes)
+    composite_homographies = {reference_index: np.eye(3)}  
+    # graph = {i: list(node.connections.keys()) for i, node in enumerate(nodes)} 
+    # graph = {i: list(node.connections.keys()) for i, node in enumerate(nodes)} 
+
+    # print("graph:", graph)
+    # nodes_data[node].stats[neighbor]["mean_error"]
+    
+    mean_error_max = 0.0
+    variance_error_max = 0.0
+    dists_error_max = 0.0
+    
+    for i, node in enumerate(nodes):
+        for k in node.connections.keys():
+            mean_error_max = max(mean_error_max, node.stats[k]["mean_error"])
+            variance_error_max = max(variance_error_max, node.stats[k]["variance_error"])
+            dists_error_max = max(dists_error_max, node.stats[k]["dists_error"])
+    
+    max_tuple = (mean_error_max, variance_error_max, dists_error_max)
+    
+    graph = dict()
+    for i, node in enumerate(nodes):
+        transitions = [(k, improved_cost_function(nodes[i].stats[k], max_tuple)) for k in node.connections.keys()]
+        graph[i] = transitions
+    
+    print("graph0:", graph[0])
+    print("graph1:", graph[1])
+    
+    
+    pbar = tqdm.tqdm(total=num_nodes)
+
+    for node_id in range(num_nodes):
+        
+        pbar.update(1)
+        
+        if node_id == reference_index:
+            continue
+        
+        path = dijkstra(graph, node_id, reference_index)   
+        
+        path.reverse()
+        print("path:", path, "node_id:", node_id)
+        
+        # Compute the composite homography for this path
+        H = np.eye(3)
+        
+        for i in range(len(path) - 1):
+            src = path[i]
+            dst = path[i + 1]
+            
+            H = H @ nodes[dst].connections[src]
+        
+        composite_homographies[node_id] = H
+    
+    
+    
     
     return composite_homographies
