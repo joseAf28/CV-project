@@ -5,6 +5,7 @@ import FrameGraph as fg
 import perspective as pt
 import pickle
 import tqdm
+import matplotlib.pyplot as plt
 
 import os
 import glob
@@ -26,10 +27,18 @@ with open("volley/graph1.pkl", "rb") as f:
 #     print(node.stats.keys())
 #     print()
 
-
+reference_index = 163
 ## homographies from the reference frame to all the other frames
-composite_homographies = fg.compute_composite_homographies_2('k_beam', nodes, reference_index=0)
+composite_homographies, path_lenghts  = fg.compute_composite_homographies_2('', nodes, reference_index=reference_index)
 
+
+### Plot of the path lenghts
+plt.figure()
+plt.plot(path_lenghts, '.')
+plt.xlabel("Frame index")
+plt.ylabel("Path length")
+plt.grid()
+plt.savefig("volley/path_lenghts.png")
 
 ### obtain the paths of the images
 # folder_path = "ISRwall/input_1/images"
@@ -64,8 +73,8 @@ for i in range(len(image_files)):
 image_files = [x for x in image_files if x is not None]
 
 
-initial_image_path = image_files[0]
-images_path = image_files[1:]
+initial_image_path = image_files[reference_index]
+images_path = image_files[0:reference_index] + image_files[reference_index+1:]
 
 images_path = images_path[:450]
 

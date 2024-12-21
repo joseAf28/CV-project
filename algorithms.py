@@ -66,7 +66,7 @@ def compute_RANSAC_iterations(epsilon, s=4, p=0.99):
 
 
 
-def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=500):
+def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=700):
 
     inlier_threshold = 2.0
     best_inliers = []
