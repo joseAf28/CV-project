@@ -34,20 +34,15 @@ for i in range(len(keypoints_files)):
 
 keypoints_files = [x for x in keypoints_files if x is not None]
 
+# keypoints_files = keypoints_files[:450]
 
-keypoints_files = keypoints_files[:450]
-
-# ### vector of filenames
-# # filenames_vec = [f"ISRwall/input_1/keypoints/kp_000{i}.mat" for i in range(1, 10)]
+reference_index = 163
 
 ##! initialize the graph: create the nodes
 nodes = fg.initialize_graph(keypoints_files)
 
 ##! compute the edges
-# nodes = fg.compute_delaunay_edges(nodes)
-# nodes = fg.compute_edges(nodes)
-nodes = fg.compute_proximity_edges(nodes)
-
+nodes = fg.compute_edges(nodes, reference_index)
 
 for node in nodes:
     print(node)

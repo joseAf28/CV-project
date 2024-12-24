@@ -66,6 +66,7 @@ def compute_RANSAC_iterations(epsilon, s=4, p=0.99):
 
 
 
+##! Dynamic Loop not used
 def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=700):
 
     inlier_threshold = 2.0
@@ -112,17 +113,5 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=7
             break
         
         counter += 1
-    
-    inliers_ratio = len(best_inliers) / len(matches)
-    mean_error = np.mean(dists)
-    variance_error = np.var(dists)
-    
-    stats = {
-        "inliers_ratio": inliers_ratio,
-        "inliers_nb": len(best_inliers),
-        "mean_error": mean_error, 
-        "variance_error": variance_error,
-        "dists_error": np.sum(dists)
-        }
         
-    return best_inliers, stats
+    return best_inliers

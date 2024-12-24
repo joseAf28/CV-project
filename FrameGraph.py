@@ -85,33 +85,17 @@ def compute_stats(matches, kp1, kp2, H):
     return stats
     
 
-###? Compute the edges between the frames using the previous frame
-def compute_edges(nodes, threshold=0.25):
-    
-    for i in tqdm.tqdm(range(len(nodes) - 1)):
-        
-        j = i + 1
-        
-        matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, threshold)
-        best_inliers, stats = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
-        kp1 = nodes[i].keypoints[best_inliers[:, 0]]
-        kp2 = nodes[j].keypoints[best_inliers[:, 1]]
-        
-        H = alg.getPerspectiveTransform(kp1, kp2)
-        H_inv = alg.getPerspectiveTransform(kp2, kp1)
-        
-        nodes[i].add_connection(j, best_inliers, H, stats)
-        nodes[j].add_connection(i, best_inliers, H_inv, stats)
-    
-    
-    return nodes
-
 
 ###? Compute the edges between the frames using the proximity of the frames
-### Weighted Centroids
-### Use best_inliers_threshold to filter the connections
-def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.25, best_inliers_threshold=6):
 
+###! Similarity based connections
+### KNN based on the weighted centroids
+### Use best_inliers_threshold to filter the connections
+###! Direct connections to the reference frame
+###! Temporal connections to the previous frame
+def compute_edges(nodes, reference_index, num_neighbors=3, threshold2=0.25, best_inliers_threshold=6):
+
+    ###! Similarity based connections
     centroids = []
     for node in nodes:
         
@@ -132,7 +116,7 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.25, best_inlier
             if i != j:                
                 
                 matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, threshold2)
-                best_inliers, stats = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
+                best_inliers = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
                 
                 ##! Check if there are enough inliers
                 if len(best_inliers) < best_inliers_threshold:
@@ -151,16 +135,16 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.25, best_inlier
         
         if print_flag:
             print("i:", i, "nearest_neighbors:", nearest_neighbors)
-
         
-        ##? always try the homography to the previous frame
-        if i > 0:
+        ###! Temporal connections to the previous frame
+        # ##? always try the homography to the previous frame
+        if i > 0 and i != reference_index and i-1 not in nearest_neighbors:
             
             j = i-1
             i1 = i
             
             matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
-            best_inliers, stats = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
             
             if len(best_inliers) < best_inliers_threshold:
                 continue
@@ -175,7 +159,32 @@ def compute_proximity_edges(nodes, num_neighbors=3, threshold2=0.25, best_inlier
             
             nodes[i1].add_connection(j, best_inliers, H, stats)
             nodes[j].add_connection(i1, best_inliers, H_inv, stats)
-    
+        
+        
+        ###! Direct connections to the reference frame
+        if i != reference_index and reference_index not in nearest_neighbors:
+            
+            j = reference_index
+            i1 = i
+            
+            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
+            best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            
+            if len(best_inliers) < best_inliers_threshold:
+                continue
+            
+            kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
+            kp2 = nodes[j].keypoints[best_inliers[:, 1]]
+                
+            H = alg.getPerspectiveTransform(kp1, kp2)
+            H_inv = alg.getPerspectiveTransform(kp2, kp1)
+            
+            stats = compute_stats(matches, kp1, kp2, H)
+            
+            nodes[i1].add_connection(j, best_inliers, H, stats)
+            nodes[j].add_connection(i1, best_inliers, H_inv, stats)
+            
+            
     return nodes
 
 
@@ -317,8 +326,7 @@ def dijkstra(graph, start_node, end_node):
         visited.add(current_node)
 
         if current_node == end_node:
-            # return path, current_cost
-            return path
+            return path, current_cost
 
         for neighbor, cost in graph.get(current_node, {}):
             if neighbor not in visited:
@@ -347,6 +355,7 @@ def compute_composite_homographies_2(search_alg, nodes, reference_index=0):
     composite_homographies = {reference_index: np.eye(3)}  
     
     path_lengths = np.zeros(num_nodes)
+    path_costs = np.zeros(num_nodes)
     
     mean_error_max = 0.0
     variance_error_max = 0.0
@@ -374,12 +383,13 @@ def compute_composite_homographies_2(search_alg, nodes, reference_index=0):
         if node_id == reference_index:
             continue
         
-        path = dijkstra(graph, node_id, reference_index)   
+        path, cost = dijkstra(graph, node_id, reference_index)   
         
         path.reverse()
         print("path:", path, "node_id:", node_id)
         
         path_lengths[node_id] = len(path)
+        path_costs[node_id] = cost
         
         # Compute the composite homography for this path
         H = np.eye(3)
@@ -395,4 +405,4 @@ def compute_composite_homographies_2(search_alg, nodes, reference_index=0):
     
     
     
-    return composite_homographies, path_lengths
+    return composite_homographies, path_lengths, path_costs
