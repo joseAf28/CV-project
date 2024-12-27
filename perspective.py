@@ -42,6 +42,9 @@ def warp_perspective_full(src, H, dst):
     # px += 12000
     # py += 6000
     
+    px += 300
+    py += 150
+    
     valid_indices = (0 <= px) & (px < width) & (0 <= py) & (py < height)
     
     for c in range(src.shape[2]):

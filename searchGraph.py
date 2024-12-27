@@ -5,6 +5,7 @@ import FrameGraph as fg
 import perspective as pt
 import pickle
 import tqdm
+import matplotlib.pyplot as plt
 
 import os
 import glob
@@ -14,21 +15,33 @@ import glob
 ### load the graph
 # with open("ISRwall/input_1/graph1.pkl", "rb") as f:
 #     nodes = pickle.load(f)
-    
+
 with open("volley/graph1.pkl", "rb") as f:
     nodes = pickle.load(f)
 
 
-### print the nodes
-# for node in nodes:
-#     print(node)
-#     print(node.connections.keys())
-#     print(node.stats.keys())
-#     print()
-
+reference_index = 163
 
 ## homographies from the reference frame to all the other frames
-composite_homographies = fg.compute_composite_homographies('gbfs', nodes, reference_index=0)
+composite_homographies, path_lenghts, path_costs  = fg.compute_composite_homographies_2('', nodes, reference_index=reference_index)
+
+
+### Plot of the path lenghts
+plt.figure()
+plt.plot(path_lenghts, '.')
+plt.xlabel("Frame index")
+plt.ylabel("Path length")
+plt.grid()
+plt.savefig("volley/path_lenghts.png")
+
+
+### Plot of the path lenghts
+plt.figure()
+plt.plot(path_costs, '.')
+plt.xlabel("Frame index")
+plt.ylabel("Path Cost")
+plt.grid()
+plt.savefig("volley/path_costs.png")  
 
 
 ### obtain the paths of the images
@@ -63,19 +76,15 @@ for i in range(len(image_files)):
 
 image_files = [x for x in image_files if x is not None]
 
+initial_image_path = image_files[reference_index]
+images_path = image_files[0:reference_index] + image_files[reference_index+1:]
 
-
-initial_image_path = image_files[0]
-images_path = image_files[1:]
-
-images_path = images_path[:450]
-
+# images_path = images_path[:450]
 
 initial_image = pt.image_to_matrix(initial_image_path)
 width, height = (2000,1000)
 
 
-start=2000
 
 H_cumulative = np.eye(3)
 
