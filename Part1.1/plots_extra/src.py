@@ -1,70 +1,55 @@
 import numpy as np
 import os
 import scipy.io
-import matplotlib.colors as mcolors
+import imageio.v2 as imageio
 
-
-from PIL import Image
-import numpy as np
-
-
+# Converts an image to a NumPy matrix representation
 def image_to_matrix(image_path):
-    img = Image.open(image_path)  # Abrir a imagem
-    if img.mode == 'RGBA':
-        img = img.convert('RGB')
-    img_matrix = np.array(img)   # Converter em matriz numpy
+    img_matrix = imageio.imread(image_path) # Load the image into a NumPy array
+    # If the image has an alpha channel (RGBA), convert it to RGB
+    if img_matrix.shape[-1] == 4:  # RGBA image
+        img_matrix = img_matrix[:, :, :3]  # Remove the alpha channel
     return img_matrix
 
-
-def matrix_to_image(matrix, output_path):
-    img = Image.fromarray(matrix)  # Converter a matriz numpy de volta para imagem
-    img.save(output_path)          # Salvar a imagem
-
-
-
-
-### YOLO MANIPULATION STUFF ###
-
+# Loads YOLO data from a directory and organizes it by object ID
 def load_yolo(directory_path):
-    ## return a dictionary with:
-    ## key - id
-    ## value - coordinates, nb_frame
+    # Returns a dictionary with:
+    # Key - object ID
+    # Value - coordinates and corresponding frame number
 
+    # List all files in the directory and sort them
     elements = os.listdir(directory_path)
     elements = sorted(elements)
 
-    len_elements = len(elements)
-
-
+    # Initialize tensors for YOLO data
     tensor_yolo_id = []
     tensor_yolo_xyxy = []
 
+    # Process each YOLO detection file
     for i, element in enumerate(elements):
         data_yolo = scipy.io.loadmat(f"{directory_path}/{element}")
         
+        # Extract IDs and bounding box coordinates
         data_yolo_id = data_yolo['id']
         data_yolo_xyxy = data_yolo['xyxy']
         
         tensor_yolo_xyxy.append(data_yolo_xyxy)
         tensor_yolo_id.append(data_yolo_id)
 
-
-    np.unique(tensor_yolo_id[0])
-
+    # Identify all unique object IDs
     unique_ids = np.unique(tensor_yolo_id[0])
-
     for i in range(1, len(tensor_yolo_id)):
         unique_ids = np.union1d(unique_ids, np.unique(tensor_yolo_id[i]))
 
-    ### determine the coordinates for each id
-
+    # Initialize a dictionary to store coordinates for each ID
     track_coordinates = {id: [] for id in unique_ids}
-
+    # Collect coordinates for each object ID across frames
     for i in range(len(tensor_yolo_id)):
         for j in range(len(tensor_yolo_id[i])):
             id = tensor_yolo_id[i][j][0]
             coordinates = tensor_yolo_xyxy[i][j]
             
+            # Compute the mean (center) of the bounding box
             x_mean = (coordinates[0] + coordinates[2]) / 2.0
             y_mean = (coordinates[1] + coordinates[3]) / 2.0
             
@@ -72,63 +57,44 @@ def load_yolo(directory_path):
             
             track_coordinates[id].append(coords_mean)
 
-
+    # Convert lists to NumPy arrays
     for key in track_coordinates.keys():
         track_coordinates[key] = np.array(track_coordinates[key])
 
     return track_coordinates
 
-
-
-def coordinates2image(track_coordinates, card, color, large = False):
-    
+# Converts object coordinates to an image representation
+def coordinates2image(track_coordinates, card, color, large=False):
     width, height = card
-
     track_coordinates_int = track_coordinates.astype(int)
-
-    # # background white, track black
-    # size = 10
-    # image = 255*np.ones((height, width, 3), dtype=np.uint8)
-    # for i in range(len(track_coordinates_int)):
-    #     x = track_coordinates_int[i][0]
-    #     y = track_coordinates_int[i][1]
-    #     # image[y, x] = 0
-    #     # image[y-size:y+size, x-size:x+size] = 0
-        
-    #     image[:, x-size:x+size] = 0
-    #     image[y-size:y+size, :] = 0
     
-    
-    # size = 10
+    # Initialize the image canvas
     image = np.zeros((height, width, 3), dtype=np.uint8)
-    for i in range(len(track_coordinates_int)):
-        x = track_coordinates_int[i][0]
-        y = track_coordinates_int[i][1]
-        image[y, x] = color
-        
-        # image[y-size:y+size, x-size:x+size] = 255
-        # Se large for True, pintar pixels adjacentes
-        if large:
-            # Coordenadas dos pixels adjacentes
-            neighbors = [
-                (x - 1, y), (x + 1, y),  # Esquerda e direita
-                (x, y - 1), (x, y + 1),  # Cima e baixo
-                (x - 1, y - 1), (x + 1, y - 1),  # Canto superior esquerdo e direito
-                (x - 1, y + 1), (x + 1, y + 1),  # Canto inferior esquerdo e direito
-            ]
-            # Pintar os vizinhos se estiverem dentro dos limites
-            for nx, ny in neighbors:
-                if 0 <= ny < height and 0 <= nx < width:
-                    image[ny, nx] = color
+
+    # Validate that coordinates are within the image bounds
+    valid_mask = (
+        (track_coordinates_int[:, 0] >= 0) & (track_coordinates_int[:, 0] < width) &
+        (track_coordinates_int[:, 1] >= 0) & (track_coordinates_int[:, 1] < height)
+    )
+    track_coordinates_valid = track_coordinates_int[valid_mask]
+
+    # Paint valid pixels with the specified color
+    image[track_coordinates_valid[:, 1], track_coordinates_valid[:, 0]] = color
+
+    # Optionally expand to neighboring pixels (manual dilation)
+    if large:
+        dilated_image = np.zeros_like(image)
+        for dx in range(-large, large + 1):
+            for dy in range(-large, large + 1):
+                shifted_y = np.clip(track_coordinates_valid[:, 1] + dy, 0, height - 1)
+                shifted_x = np.clip(track_coordinates_valid[:, 0] + dx, 0, width - 1)
+                dilated_image[shifted_y, shifted_x] = color
+        image = dilated_image
 
     return image
 
-
-
-
-### LINEAR ALGEBRA STUFF ###
 ### FROM mint-lab repository (known from the slides provided by the professor) ###
-
+# Computes the perspective transformation matrix
 def getPerspectiveTransform(src, dst):
     if len(src) == len(dst):
         # Make homogeneous coordiates if necessary
@@ -149,79 +115,25 @@ def getPerspectiveTransform(src, dst):
         H = x.reshape(3, -1) / x[-1] # Normalize the last element as 1
         return H
 
-
-
+# Warps an image using a perspective transformation matrix
 def warpPerspective2(src, H, dst_size, color=[255, 255, 255]):
-    # Generate an empty image
     width, height = dst_size
-    channel = src.shape[2] if src.ndim > 2 else 1
-    dst = np.zeros((height, width, channel), dtype=src.dtype)
-    
-    # Copy a pixel from `src` to `dst` (backward mapping)
-    H_inv = np.linalg.inv(H)
-    for qy in range(height):
-        for qx in range(width):
-            p = H_inv @ [qx, qy, 1]
-            px, py = int(p[0]/p[-1] + 0.5), int(p[1]/p[-1] + 0.5)
-            if px >= 0 and py >= 0 and px < src.shape[1] and py < src.shape[0]:
-                
-                dst[qy, qx] = src[py, px]
-                """
-                intensity = src[py, px]
-                if np.all(intensity == color):
-                    dst[qy, qx] = color"""
-                    
-            else:
-                dst[qy, qx] = [0, 0, 0]
-                
-            
-    return dst
-
-
-
-## different warpPerspective function
-def warpPerspective3(src, H, dst_size):
-    
-    src_corners = np.array([[0, 0, 1], [src.shape[1], 0, 1],
-                        [src.shape[1], src.shape[0], 1], [0, src.shape[0], 1]])
-    dst_corners = (H @ src_corners.T).T
-    dst_corners /= dst_corners[:, 2:3]  # Normalize
-
-    x_min, y_min = np.min(dst_corners[:, :2], axis=0)
-    x_max, y_max = np.max(dst_corners[:, :2], axis=0)
-
-    # Update dst_size based on transformed bounds
-    width, height = int(np.ceil(x_max - x_min)), int(np.ceil(y_max - y_min))
-    dst_size = (width, height)
-    
-    print("new dst_size", dst_size)
-    
-    # Generate an empty image
-    width, height = dst_size
-    channel = src.shape[2] if src.ndim > 2 else 1
-    dst = np.zeros((height, width, channel), dtype=src.dtype)
-
-    # Compute inverse homography
     H_inv = np.linalg.inv(H)
 
-    # Backward mapping with bilinear interpolation
-    for qy in range(height):
-        for qx in range(width):
-            p = H_inv @ [qx, qy, 1]
-            p_x, p_y = p[0] / p[-1], p[1] / p[-1]
+    # Generate a grid of coordinates in the destination space
+    qx, qy = np.meshgrid(np.arange(width), np.arange(height))
+    q_coords = np.stack([qx.ravel(), qy.ravel(), np.ones_like(qx).ravel()])
 
-            if 0 <= p_x < src.shape[1] and 0 <= p_y < src.shape[0]:
-                x0, y0 = int(np.floor(p_x)), int(np.floor(p_y))
-                x1, y1 = x0 + 1, y0 + 1
+    # Transform destination coordinates back to the source space
+    p_coords = H_inv @ q_coords
+    p_coords /= p_coords[2]   # Normalize homogeneous coordinates
+    px, py = p_coords[0].astype(int), p_coords[1].astype(int)
 
-                a, b = p_x - x0, p_y - y0
-                f00 = src[y0, x0] if y0 < src.shape[0] and x0 < src.shape[1] else 0
-                f01 = src[y0, x1] if y0 < src.shape[0] and x1 < src.shape[1] else 0
-                f10 = src[y1, x0] if y1 < src.shape[0] and x0 < src.shape[1] else 0
-                f11 = src[y1, x1] if y1 < src.shape[0] and x1 < src.shape[1] else 0
+    # Mask for valid coordinates
+    valid_mask = (px >= 0) & (py >= 0) & (px < src.shape[1]) & (py < src.shape[0])
 
-                dst[qy, qx] = (1 - a) * (1 - b) * f00 + a * (1 - b) * f01 + (1 - a) * b * f10 + a * b * f11
-            else:
-                dst[qy, qx] = 0  # Default value for undefined pixels
+    # Create the destination image
+    dst = np.zeros((height, width, src.shape[2]), dtype=src.dtype)
+    dst[qy.ravel()[valid_mask], qx.ravel()[valid_mask]] = src[py[valid_mask], px[valid_mask]]
 
     return dst
