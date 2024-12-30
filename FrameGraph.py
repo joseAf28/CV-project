@@ -30,8 +30,7 @@ class FrameNode:
         descriptors_norm = np.linalg.norm(descriptors, axis=1)
         descriptors_norm[descriptors_norm == 0] = 1.0
         self.descriptor_weights = np.var(descriptors/descriptors_norm[:,None], axis=1)
-        self.descriptor_weights = np.linalg.norm(descriptors, axis=1)
-        # self.descriptor_weights = np.var(descriptors, axis=1)
+        
         
         self.inliers = {} # key: frame_id, value: inliers
         self.stats = {} # key: frame_id, value: stats
@@ -51,14 +50,18 @@ class FrameNode:
 
 
 #############! Initialize the graph
-def initialize_graph(frames_path):
+def initialize_graph(reference_path, frames_path):
     
-    nodes = np.zeros(len(frames_path), dtype=FrameNode)
+    nodes = np.zeros(len(frames_path)+1, dtype=FrameNode)
+    
+    kp, desc = load_keypoints(reference_path)
+    nodes[0] = FrameNode(0, kp, desc)
+    
     
     for i, frame in enumerate(frames_path):
         kp, desc = load_keypoints(frame)
         
-        nodes[i] = FrameNode(i, kp, desc)
+        nodes[i+1] = FrameNode(i, kp, desc)
     
     return nodes
 
@@ -116,7 +119,8 @@ def compute_edges(nodes, reference_index, num_neighbors=3, threshold2=0.25, best
             if i != j:                
                 
                 matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, threshold2)
-                best_inliers = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
+                # best_inliers = alg.RANSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
+                best_inliers = alg.MSAC(matches, nodes[i].keypoints, nodes[j].keypoints)
                 
                 ##! Check if there are enough inliers
                 if len(best_inliers) < best_inliers_threshold:
@@ -144,7 +148,8 @@ def compute_edges(nodes, reference_index, num_neighbors=3, threshold2=0.25, best
             i1 = i
             
             matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
-            best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            # best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            best_inliers = alg.MSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
             
             if len(best_inliers) < best_inliers_threshold:
                 continue
@@ -168,7 +173,8 @@ def compute_edges(nodes, reference_index, num_neighbors=3, threshold2=0.25, best
             i1 = i
             
             matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, threshold2)
-            best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            # best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
+            best_inliers = alg.MSAC(matches, nodes[i1].keypoints, nodes[j].keypoints)
             
             if len(best_inliers) < best_inliers_threshold:
                 continue
@@ -340,12 +346,12 @@ def dijkstra(graph, start_node, end_node):
 
 def improved_cost_function(stats, max_tuple):
     
-    alpha = 0.9
-    beta = 0.1
-    value = alpha * stats["mean_error"]/max_tuple[0] + beta * stats["variance_error"]/max_tuple[1]
-    return value
-    # return stats["mean_error"]
+    # alpha = 0.9
+    # beta = 0.1
+    # value = alpha * stats["mean_error"]/max_tuple[0] + beta * stats["variance_error"]/max_tuple[1]
+    # return value
 
+    return stats["mean_error"]
 
 
 
@@ -391,18 +397,36 @@ def compute_composite_homographies_2(search_alg, nodes, reference_index=0):
         path_lengths[node_id] = len(path)
         path_costs[node_id] = cost
         
-        # Compute the composite homography for this path
-        H = np.eye(3)
+        H = np.identity(3, dtype=np.float64)
         
         for i in range(len(path) - 1):
             src = path[i]
             dst = path[i + 1]
             
-            H = H @ nodes[dst].connections[src]
+            H = np.dot(H, nodes[dst].connections[src])
+            H /= H[2, 2]
         
         composite_homographies[node_id] = H
     
     
+    return composite_homographies, path_lengths, path_costs, graph
+
+
+
+
+
+import matplotlib.pyplot as plt
+import networkx as nx
+
+def plot_graph(graph):
+    G = nx.DiGraph()
+    for node, transitions in graph.items():
+        for neighbor, cost in transitions:
+            G.add_edge(node, neighbor, weight=cost)
     
-    
-    return composite_homographies, path_lengths, path_costs
+    plt.figure(figsize=(20, 20))
+    pos = nx.spring_layout(G)
+    nx.draw(G, pos, with_labels=True, node_size=200, node_color='skyblue', font_size=8, font_color='darkblue')
+    labels = nx.get_edge_attributes(G, 'weight')
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='black', font_size=3)
+    plt.savefig("volley/graph.png")

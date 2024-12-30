@@ -1,0 +1,220 @@
+
+###! Idea of refinement
+def find_best_path(nodes, reference_index=0):
+    
+    num_nodes = len(nodes)
+    
+    path_lengths = np.zeros(num_nodes)
+    path_costs = np.zeros(num_nodes)
+    
+    mean_error_max = 0.0
+    variance_error_max = 0.0
+    dists_error_max = 0.0
+    
+    for i, node in enumerate(nodes):
+        for k in node.connections.keys():
+            mean_error_max = max(mean_error_max, node.stats[k]["mean_error"])
+            variance_error_max = max(variance_error_max, node.stats[k]["variance_error"])
+            dists_error_max = max(dists_error_max, node.stats[k]["dists_error"])
+    
+    max_tuple = (mean_error_max, variance_error_max, dists_error_max)
+    
+    graph = dict()
+    for i, node in enumerate(nodes):
+        transitions = [(k, improved_cost_function(nodes[i].stats[k], max_tuple)) for k in node.connections.keys()]
+        graph[i] = transitions
+    
+    
+    paths_nodes = np.zeros(num_nodes, dtype=object)
+    
+    
+    pbar = tqdm.tqdm(total=num_nodes)
+    for node_id in range(num_nodes):
+        
+        pbar.update(1)
+        
+        if node_id == reference_index:
+            continue
+        
+        path, cost = dijkstra(graph, node_id, reference_index)   
+        
+        path.reverse()
+        print("path:", path, "node_id:", node_id)
+        
+        paths_nodes[node_id] = path
+        
+    
+    return paths_nodes, graph
+
+
+def normalize_homography(H):
+    """
+    Normalizes the homography matrix so that H[2,2] = 1.
+    """
+    return H / H[2, 2]
+
+
+def project_point(H, p):
+    """
+    Projects a point p using homography H.
+    
+    Args:
+        H (numpy.ndarray): 3x3 homography matrix.
+        p (tuple): (x, y) coordinates of the point.
+    
+    Returns:
+        numpy.ndarray: Projected (x', y') coordinates.
+    """
+    p_homog = np.array([p[0], p[1], 1.0])
+    p_proj = H @ p_homog
+    p_proj /= p_proj[2]
+    return p_proj[:2]
+
+
+
+def compute_reprojection_error(H, src_pts, dst_pts):
+    """
+    Computes the sum of squared reprojection errors.
+    
+    Args:
+        H (numpy.ndarray): 3x3 homography matrix.
+        src_pts (numpy.ndarray): Source points (Mx2).
+        dst_pts (numpy.ndarray): Destination points (Mx2).
+    
+    Returns:
+        float: Total reprojection error.
+    """
+    error = 0.0
+    for p, p_prime in zip(src_pts, dst_pts):
+        p_proj = project_point(H, p)
+        error += np.sum((p_proj - p_prime) ** 2)
+    return error
+
+
+def compute_gradient(H, src_pts, dst_pts):
+    """
+    Computes the gradient of the reprojection error with respect to homography parameters.
+    
+    Args:
+        H (numpy.ndarray): 3x3 homography matrix.
+        src_pts (numpy.ndarray): Source points (Mx2).
+        dst_pts (numpy.ndarray): Destination points (Mx2).
+    
+    Returns:
+        numpy.ndarray: Gradient vector (8,).
+    """
+    M = src_pts.shape[0]
+    grad = np.zeros(8)
+    
+    for i in range(M):
+        x, y = src_pts[i]
+        x_prime, y_prime = dst_pts[i]
+        
+        # Projection
+        denom = H[2,0]*x + H[2,1]*y + 1.0
+        proj_x = (H[0,0]*x + H[0,1]*y + H[0,2]) / denom
+        proj_y = (H[1,0]*x + H[1,1]*y + H[1,2]) / denom
+        
+        # Residuals
+        r_x = proj_x - x_prime
+        r_y = proj_y - y_prime
+        
+        # Partial derivatives w.r.t H parameters
+        # Derivatives for proj_x
+        d_proj_x_dH00 = x / denom
+        d_proj_x_dH01 = y / denom
+        d_proj_x_dH02 = 1 / denom
+        d_proj_x_dH06 = -x * (H[0,0]*x + H[0,1]*y + H[0,2]) / (denom ** 2)
+        d_proj_x_dH07 = -y * (H[0,0]*x + H[0,1]*y + H[0,2]) / (denom ** 2)
+        
+        # Derivatives for proj_y
+        d_proj_y_dH10 = x / denom
+        d_proj_y_dH11 = y / denom
+        d_proj_y_dH12 = 1 / denom
+        d_proj_y_dH16 = -x * (H[1,0]*x + H[1,1]*y + H[1,2]) / (denom ** 2)
+        d_proj_y_dH17 = -y * (H[1,0]*x + H[1,1]*y + H[1,2]) / (denom ** 2)
+        
+        # Accumulate gradients
+        # H parameters order: [H00, H01, H02, H10, H11, H12, H20, H21]
+        grad[0] += 2 * r_x * d_proj_x_dH00
+        grad[1] += 2 * r_x * d_proj_x_dH01
+        grad[2] += 2 * r_x * d_proj_x_dH02
+        grad[6] += 2 * r_x * d_proj_x_dH06
+        grad[7] += 2 * r_x * d_proj_x_dH07
+        
+        grad[3] += 2 * r_y * d_proj_y_dH10
+        grad[4] += 2 * r_y * d_proj_y_dH11
+        grad[5] += 2 * r_y * d_proj_y_dH12
+        grad[6] += 2 * r_y * d_proj_y_dH16
+        grad[7] += 2 * r_y * d_proj_y_dH17
+        
+    return grad
+
+
+
+def gradient_descent_homography(H_initial, src_pts, dst_pts, learning_rate=1e-7, 
+                                max_iters=10000, tol=1e-6):
+    """
+    Optimizes the homography matrix using gradient descent.
+    
+    Args:
+        H_initial (numpy.ndarray): Initial 3x3 homography matrix.
+        src_pts (numpy.ndarray): Source points (Mx2).
+        dst_pts (numpy.ndarray): Destination points (Mx2).
+        learning_rate (float): Learning rate for gradient descent.
+        max_iters (int): Maximum number of iterations.
+        tol (float): Tolerance for convergence based on gradient norm.
+    
+    Returns:
+        numpy.ndarray: Optimized 3x3 homography matrix.
+        list: History of cost values.
+    """
+    H = normalize_homography(H_initial.copy())
+    
+    # Extract parameters [h0, h1, h2, h3, h4, h5, h6, h7]
+    params = np.array([
+        H[0,0], H[0,1], H[0,2],
+        H[1,0], H[1,1], H[1,2],
+        H[2,0], H[2,1]
+    ])
+    
+    cost_history = []
+    
+    for it in range(max_iters):
+        # Reconstruct H from params
+        H_recon = np.array([
+            [params[0], params[1], params[2]],
+            [params[3], params[4], params[5]],
+            [params[6], params[7], 1.0]
+        ])
+        H_recon = normalize_homography(H_recon)
+        
+        # Compute cost
+        cost = compute_reprojection_error(H_recon, src_pts, dst_pts)
+        cost_history.append(cost)
+        
+        # Compute gradient
+        grad = compute_gradient(H_recon, src_pts, dst_pts)
+        
+        # Check for convergence
+        grad_norm = np.linalg.norm(grad)
+        if grad_norm < tol:
+            print(f"Convergence achieved at iteration {it+1}")
+            break
+        
+        # Update parameters
+        params -= learning_rate * grad
+        
+        # Optionally, print progress
+        if (it+1) % 1000 == 0 or it == 0:
+            print(f"Iteration {it+1}: Cost = {cost:.4f}, Gradient Norm = {grad_norm:.4f}")
+    
+    # Final homography
+    H_final = np.array([
+        [params[0], params[1], params[2]],
+        [params[3], params[4], params[5]],
+        [params[6], params[7], 1.0]
+    ])
+    H_final = normalize_homography(H_final)
+    
+    return H_final, cost_history

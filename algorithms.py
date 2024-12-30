@@ -115,3 +115,127 @@ def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, epsilon_init=0.6, max_iter=7
         counter += 1
         
     return best_inliers
+
+
+##! First Version
+# def MSAC(matches, kp1, kp2, max_iterations=1000, threshold=4.0, confidence=0.99):
+
+#     num_points = matches.shape[0]
+#     best_H = None
+#     best_inliers = []
+#     best_score = float('inf')  # MSAC minimizes the total cost
+#     iterations = 0
+#     best_confidence = 0.0
+
+#     if matches.shape[0] < 4:
+#         return best_inliers, None
+
+
+#     while iterations < max_iterations and best_confidence < confidence:
+#         # Step 1: Randomly sample 4 correspondences
+#         sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
+        
+#         # homography estimation
+#         H = getPerspectiveTransform(kp1[sampled_matches[:, 0]], kp2[sampled_matches[:, 1]])
+
+#         # transform the source points
+#         src_pts_hom = np.column_stack((kp1[matches[:, 0]], np.ones((matches.shape[0], 1)))).T
+#         transformed_pts_hom = (H @ src_pts_hom).T
+#         transformed_pts_hom /= transformed_pts_hom[:, 2][:, None]
+
+#         dst_pts_all = kp2[matches[:, 1]]
+        
+#         # residuals
+#         residuals = np.linalg.norm(transformed_pts_hom[:, :2] - dst_pts_all, axis=1)
+        
+#         # new cost function: tries to minimize the residuals
+#         costs = np.where(residuals < threshold, residuals**2, threshold**2)
+#         total_cost = np.sum(costs)
+        
+        
+#         if total_cost < best_score:
+#             best_score = total_cost
+            
+#             inliers = np.where(residuals < threshold)[0]
+#             best_inliers = matches[inliers]
+            
+#             # Update confidence
+#             inlier_ratio = len(inliers) / num_points
+#             if inlier_ratio > 0:
+#                 best_confidence = 1 - (1 - inlier_ratio ** 4) ** iterations if iterations > 0 else 0
+#             else:
+#                 best_confidence = 0
+        
+#         iterations += 1
+
+#     return best_inliers
+
+
+
+###? Second Version
+def MSAC(matches, kp1, kp2, max_iterations=1000, threshold=5.0, confidence=0.99):
+
+    num_points = matches.shape[0]
+    best_H = None
+    best_inliers = []
+    best_score = float('inf')  # MSAC minimizes the total cost
+    iterations = 0
+    best_confidence = 0.0
+
+    if matches.shape[0] < 4:
+        return best_inliers, None
+
+
+    while iterations < max_iterations and best_confidence < confidence:
+        # Step 1: Randomly sample 4 correspondences
+        sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
+        
+        # homography estimation
+        H = getPerspectiveTransform(kp1[sampled_matches[:, 0]], kp2[sampled_matches[:, 1]])
+
+        # transform the source points
+        src_pts_hom = np.column_stack((kp1[matches[:, 0]], np.ones((matches.shape[0], 1)))).T
+        transformed_pts_hom = (H @ src_pts_hom).T
+        transformed_pts_hom /= transformed_pts_hom[:, 2][:, None]
+
+        dst_pts_all = kp2[matches[:, 1]]
+        
+        # residuals
+        residuals = np.linalg.norm(transformed_pts_hom[:, :2] - dst_pts_all, axis=1)
+        
+        # new cost function: tries to minimize the residuals
+        total_cost = np.sum(np.where(residuals < threshold, residuals**2, threshold**2))
+        
+        if total_cost < best_score:
+            best_score = total_cost
+            
+            inliers = np.where(residuals < threshold)[0]
+            
+            src_inliers = kp1[matches[inliers, 0]]
+            dst_inliers = kp2[matches[inliers, 1]]
+            
+            H_refined = getPerspectiveTransform(src_inliers, dst_inliers)
+            
+            src_pts_hom = np.column_stack((kp1[matches[:, 0]], np.ones((matches.shape[0], 1)))).T
+            transformed_pts_hom = (H_refined @ src_pts_hom).T
+            transformed_pts_hom /= transformed_pts_hom[:, 2][:, None]
+            
+            residuals_refined = np.linalg.norm(transformed_pts_hom[:, :2] - dst_pts_all, axis=1)
+            score_refined = np.sum(np.where(residuals_refined < threshold, residuals_refined**2, threshold**2))
+            
+            if score_refined < best_score:
+                best_score = score_refined
+                inliers_refined = np.where(residuals_refined < threshold)[0]
+                
+                best_inliers = matches[inliers_refined]
+                
+                # Update confidence
+                inlier_ratio = len(inliers_refined) / num_points
+                if inlier_ratio > 0:
+                    best_confidence = 1 - (1 - inlier_ratio ** 4) ** iterations if iterations > 0 else 0
+                else:
+                    best_confidence = 0
+        
+        iterations += 1
+
+    return best_inliers

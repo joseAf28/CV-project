@@ -20,10 +20,10 @@ with open("volley/graph1.pkl", "rb") as f:
     nodes = pickle.load(f)
 
 
-reference_index = 163
+reference_index = 0
 
 ## homographies from the reference frame to all the other frames
-composite_homographies, path_lenghts, path_costs  = fg.compute_composite_homographies_2('', nodes, reference_index=reference_index)
+composite_homographies, path_lenghts, path_costs, graph  = fg.compute_composite_homographies_2('', nodes, reference_index=reference_index)
 
 
 ### Plot of the path lenghts
@@ -42,6 +42,11 @@ plt.xlabel("Frame index")
 plt.ylabel("Path Cost")
 plt.grid()
 plt.savefig("volley/path_costs.png")  
+
+
+### Plot the graph
+plt.figure()
+fg.plot_graph(graph)
 
 
 ### obtain the paths of the images
@@ -76,8 +81,17 @@ for i in range(len(image_files)):
 
 image_files = [x for x in image_files if x is not None]
 
-initial_image_path = image_files[reference_index]
-images_path = image_files[0:reference_index] + image_files[reference_index+1:]
+
+### files of the reference image
+initial_image_path = "volley/reference/img_ref.jpg"
+
+# initial_image_path = image_files[reference_index]
+
+
+# images_path = image_files[0:reference_index] + image_files[reference_index+1:]
+
+images_path = image_files
+
 
 # images_path = images_path[:450]
 
@@ -86,7 +100,7 @@ width, height = (2000,1000)
 
 
 
-H_cumulative = np.eye(3)
+H_cumulative = np.eye(3, dtype=np.float64)
 
 dst = np.full((height, width, initial_image.shape[2] if initial_image.ndim == 3 else 1), 0, dtype=initial_image.dtype)
 dst = pt.warp_perspective_full(initial_image, H_cumulative, dst)
