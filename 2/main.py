@@ -21,7 +21,7 @@ def main():
     # plot_point_cloud(point_cloud, colors=colors, title="Colored 3D Point Cloud")
 
     # Save the point cloud with colors to a PLY file to open and observe in MeshLab
-    # save_point_cloud(point_cloud, "output_point_cloud.ply", colors=colors)
+    save_point_cloud(point_cloud, "output_point_cloud.ply", colors=colors)
 
 if __name__ == "__main__":
     main()
