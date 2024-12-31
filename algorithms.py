@@ -31,7 +31,6 @@ def getPerspectiveTransform(src, dst):
 
 ### matching algorithms
 
-
 def matching_optional(desc1, desc2, threshold=0.25):
     
     ## calculate the distances between each query descriptor and each train descriptor: i -> query, j -> train
@@ -51,11 +50,7 @@ def matching_optional(desc1, desc2, threshold=0.25):
 
 
 
-
-# def RANSAC(matches, kp1, kp2, inlier_threshold=4.0, max_iter=700):
 def RANSAC(matches, kp1, kp2, PARAMS):
-
-    # inlier_threshold = 2.0
     
     inlier_threshold = PARAMS['RANSAC_inlier_threshold']
     max_iter = PARAMS['RANSAC_max_iter']
@@ -95,7 +90,6 @@ def RANSAC(matches, kp1, kp2, PARAMS):
     return best_inliers
 
 
-# def MSAC(matches, kp1, kp2, max_iterations=1000, threshold=4.0, confidence=0.99):
 def MSAC(matches, kp1, kp2, PARAMS):
 
     max_iterations = PARAMS['MSAC_max_iter']

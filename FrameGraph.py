@@ -106,7 +106,6 @@ def compute_stats(matches, kp1, kp2, H):
 ###? Temporal connections to the previous frame
 ### Use best_inliers_threshold to filter the connections
 
-# def compute_edges(nodes, reference_index, num_neighbors=3, threshold2=0.25, best_inliers_threshold=18):
 def compute_edges(nodes, PARAMS):
     
     reference_index = PARAMS['node_reference_index']
@@ -248,8 +247,6 @@ def cost_function(stats, max_tuple):
     return value
 
 
-
-# def compute_composite_homographies(nodes, reference_index=0):
 def compute_composite_homographies(nodes, PARAMS):
     
     reference_index = PARAMS['node_reference_index']
