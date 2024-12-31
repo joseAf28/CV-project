@@ -39,9 +39,6 @@ def warp_perspective_full(src, H, dst):
     px = np.int32(transformed_coords[0, :] + 0.5)
     py = np.int32(transformed_coords[1, :] + 0.5)
     
-    # px += 12000
-    # py += 6000
-    
     px += 300
     py += 150
     
@@ -51,3 +48,4 @@ def warp_perspective_full(src, H, dst):
         dst[py[valid_indices], px[valid_indices], c] = src[:, :, c].flat[valid_indices]
     
     return dst
+
