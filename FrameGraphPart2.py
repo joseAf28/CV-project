@@ -1,54 +1,89 @@
 import numpy as np
 import scipy
 from scipy.spatial import Delaunay
-import algorithms as alg
+import algorithmsPart2 as alg
 import tqdm
 import heapq
-
-
-#############! Load Data from mat files
-
-def load_yolo(file_path):
-    data = scipy.io.loadmat(file_path)
-    
-    if 'xyxy' not in data or 'id' not in data:
-        return None, None
-    else:
-        data_xyxy = data['xyxy'] 
-        data_id = data['id']    
-        return data_xyxy, data_id
-    
 
 
 #############! FrameNode class
 class FrameNode:
     
+    @staticmethod
+    def depth_to_point_cloud(depth, rgb, intrinsics):
+        fx, fy, cx, cy = intrinsics
+        
+        y_indices, x_indices = np.indices(depth.shape)
+        
+        x = (x_indices - cx) * depth / fx
+        y = (y_indices - cy) * depth / fy
+        z = depth
+        
+        points = np.stack([x, y, z], axis=-1)
+
+        rgb = rgb.reshape(-1, 3)
+        points = points.reshape(-1, 3)
+        points_cloud = np.concatenate([points, rgb], axis=-1)
+        
+        return points_cloud
+    
+    
+    @staticmethod
+    def depth_to_point3D(kp, desc, depth, intrinsics):
+        fx, fy, cx, cy = intrinsics
+        
+        u, v = kp[:, 0], kp[:, 1]
+        z = depth[v.astype(int), u.astype(int)]
+        
+        valid_mask = z > 0
+        umod, vmod, zmod = u[valid_mask], v[valid_mask], z[valid_mask]
+        
+        x = (umod - cx) * zmod / fx
+        y = (vmod - cy) * zmod / fy
+        
+        
+        points = np.stack([x, y, zmod], axis=-1)
+        kp_valid = kp[valid_mask]
+        desc_valid = desc[valid_mask]
+        
+        return points, kp_valid, desc_valid
+    
+    
     def __init__(self, frame_id, keypoints, descriptors, depth_points, rgb_image, intrinsics):
         self.frame_id = frame_id
-        self.kp = keypoints
-        self.desc = descriptors
         
-        descriptors_norm = np.linalg.norm(descriptors, axis=1)
+        points_3D, kp_valid, desc_valid = FrameNode.depth_to_point3D(keypoints, descriptors, depth_points, intrinsics)
+        
+        
+        self.kp = kp_valid
+        self.desc = desc_valid
+        
+        descriptors_norm = np.linalg.norm(desc_valid, axis=1)
         descriptors_norm[descriptors_norm == 0] = 1.0
-        self.desc_weighted = np.var(descriptors/descriptors_norm[:,None], axis=1)
+        self.desc_weights = np.var(desc_valid/descriptors_norm[:,None], axis=1)
         
         self.depth_pts = depth_points
         self.rgb = rgb_image
         self.intrinsics = intrinsics
         
+        self.points_3D = points_3D
+
+        
         self.inliers = {}       # key: frame_id, value: inliers
         self.stats = {}         # key: frame_id, value: stats
-        self.connections = {}   # key: frame_id, value: R, T
+        self.connections = {}   # key: frame_id, value: (R, T)
+    
+
     
     
     def __repr__(self):
         return f"FrameNode({self.frame_id}) with {len(self.kp)} keypoints"
     
     
-    def add_connection(self, frame_id, inlier_indices, homography, stats):
+    def add_connection(self, frame_id, inlier_indices, R, T, stats):
         
         self.inliers[frame_id] = inlier_indices
-        self.connections[frame_id] = homography
+        self.connections[frame_id] = (R, T)
         self.stats[frame_id] = stats
 
 
@@ -79,16 +114,14 @@ def initialize_graph(kp_data, depth_data, rgb_data, intrinsics_data):
 #############! Compute the edges
 
 ###? compute the stats for each edge
-def compute_stats(matches, kp1, kp2, H):
+def compute_stats(matches, points3D_1, points3D_2, A, t):
     
-    src_pts_hom = np.column_stack((kp1, np.ones((kp1.shape[0], 1)))).T
-    transformed_pts_hom = (H @ src_pts_hom).T
-    transformed_pts_hom /= transformed_pts_hom[:, 2][:, None]
+    transformed_pts = np.dot(A, points3D_1.T).T + t
 
-    dists = np.linalg.norm(transformed_pts_hom[:, :2] - kp2, axis=1)
+    dists = np.linalg.norm(transformed_pts - points3D_2, axis=1)
     
     stats = {
-        "inliers_ratio": len(matches) / len(kp1),
+        "inliers_ratio": len(matches) / len(points3D_1),
         "mean_error": np.mean(dists), 
         "variance_error": np.var(dists),
         "dists_error": np.sum(dists)
@@ -115,8 +148,8 @@ def compute_edges(nodes, PARAMS):
     centroids = []
     for node in nodes:
         
-        kps = node.keypoints
-        weights = node.descriptor_weights
+        kps = node.kp
+        weights = node.desc_weights
         weights /= np.sum(weights)
         
         centroid = np.sum(kps * weights[:, None], axis=0)/len(kps)
@@ -125,29 +158,29 @@ def compute_edges(nodes, PARAMS):
     distances = scipy.spatial.distance_matrix(centroids, centroids)  # Compute distance between frames
     
     ### computed edges based on the matching optional algorithm
-    for i in tqdm.tqdm(range(len(nodes), desc="Computing edges")):
+    for i in tqdm.tqdm(range(len(nodes)), desc="Computing edges"):
         nearest_neighbors = np.argsort(distances[i])[1:num_neighbors + 1]  # Exclude self (dist = 0)
         
         for j in nearest_neighbors:
             if i != j:                
                 
-                matches = alg.matching_optional(nodes[i].descriptors, nodes[j].descriptors, match_threshold)
-                best_inliers = alg.MSAC(matches, nodes[i].keypoints, nodes[j].keypoints, PARAMS)
+                matches = alg.matching_optional(nodes[i].desc, nodes[j].desc, match_threshold)
+                best_inliers = alg.MSAC(matches, nodes[i].points_3D, nodes[j].points_3D, PARAMS)
                 
                 ##! Check if there are enough inliers
                 if len(best_inliers) < best_inliers_threshold:
                     continue
                 
-                kp1 = nodes[i].keypoints[best_inliers[:, 0]]
-                kp2 = nodes[j].keypoints[best_inliers[:, 1]]
+                points1 = nodes[i].points_3D[best_inliers[:, 0]]
+                points2 = nodes[j].points_3D[best_inliers[:, 1]]
                 
-                H = alg.getPerspectiveTransform(kp1, kp2)
-                H_inv = alg.getPerspectiveTransform(kp2, kp1)
+                A, t = alg.estimate_affine_transformation_svd(points1, points2)
+                Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
                 
-                stats = compute_stats(matches, kp1, kp2, H)
+                stats = compute_stats(matches, points1, points2, A, t)
                 
-                nodes[i].add_connection(j, best_inliers, H, stats)
-                nodes[j].add_connection(i, best_inliers, H_inv, stats)
+                nodes[i].add_connection(j, best_inliers, A, t, stats)
+                nodes[j].add_connection(i, best_inliers, Ainv, tinv, stats)
         
         
         ###! Temporal connections to the previous frame
@@ -157,22 +190,23 @@ def compute_edges(nodes, PARAMS):
             j = i-1
             i1 = i
             
-            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, match_threshold)
-            best_inliers = alg.MSAC(matches, nodes[i1].keypoints, nodes[j].keypoints, PARAMS)
-            
+            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
+                
+            ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
                 continue
-            
-            kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
-            kp2 = nodes[j].keypoints[best_inliers[:, 1]]
                 
-            H = alg.getPerspectiveTransform(kp1, kp2)
-            H_inv = alg.getPerspectiveTransform(kp2, kp1)
-            
-            stats = compute_stats(matches, kp1, kp2, H)
-            
-            nodes[i1].add_connection(j, best_inliers, H, stats)
-            nodes[j].add_connection(i1, best_inliers, H_inv, stats)
+            points1 = nodes[i1].points_3D[best_inliers[:, 0]]
+            points2 = nodes[j].points_3D[best_inliers[:, 1]]
+                
+            A, t = alg.estimate_affine_transformation_svd(points1, points2)
+            Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
+                
+            stats = compute_stats(matches, points1, points2, A, t)
+                
+            nodes[i1].add_connection(j, best_inliers, A, t, stats)
+            nodes[j].add_connection(i1, best_inliers, Ainv, tinv, stats)
         
         
         ###! Direct connections to the reference frame
@@ -181,22 +215,23 @@ def compute_edges(nodes, PARAMS):
             j = reference_index
             i1 = i
             
-            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, match_threshold)
-            best_inliers = alg.MSAC(matches, nodes[i1].keypoints, nodes[j].keypoints, PARAMS)
-            
+            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
+                
+            ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
                 continue
-            
-            kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
-            kp2 = nodes[j].keypoints[best_inliers[:, 1]]
                 
-            H = alg.getPerspectiveTransform(kp1, kp2)
-            H_inv = alg.getPerspectiveTransform(kp2, kp1)
-            
-            stats = compute_stats(matches, kp1, kp2, H)
-            
-            nodes[i1].add_connection(j, best_inliers, H, stats)
-            nodes[j].add_connection(i1, best_inliers, H_inv, stats)
+            points1 = nodes[i1].points_3D[best_inliers[:, 0]]
+            points2 = nodes[j].points_3D[best_inliers[:, 1]]
+                
+            A, t = alg.estimate_affine_transformation_svd(points1, points2)
+            Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
+                
+            stats = compute_stats(matches, points1, points2, A, t)
+                
+            nodes[i1].add_connection(j, best_inliers, A, t, stats)
+            nodes[j].add_connection(i1, best_inliers, Ainv, tinv, stats)
             
             
     return nodes
@@ -235,10 +270,6 @@ def dijkstra(graph, start_node, end_node):
 
 
 def cost_function(stats, max_tuple):
-    
-    # alpha = 0.9
-    # beta = 0.1
-    # value = alpha * stats["mean_error"]/max_tuple[0] + beta * stats["variance_error"]/max_tuple[1]
     
     value = stats["mean_error"]
     return value

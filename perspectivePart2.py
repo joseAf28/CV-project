@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-import algorithms as alg
+import algorithmsPart2 as alg
 import matplotlib.colors as mcolors
 from PIL import Image
 

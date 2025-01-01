@@ -4,26 +4,57 @@ import scipy
 
 ## getting homography algorithm
 
-def getPerspectiveTransform(src, dst):
-    if len(src) == len(dst):
-        # Make homogeneous coordiates if necessary
-        if src.shape[1] == 2:
-            src = np.hstack((src, np.ones((len(src), 1), dtype=src.dtype)))
-        if dst.shape[1] == 2:
-            dst = np.hstack((dst, np.ones((len(dst), 1), dtype=dst.dtype)))
 
-        # Solve 'Ax = 0'
-        A = []
-        for p, q in zip(src, dst):
-            A.append([0, 0, 0, q[2]*p[0], q[2]*p[1], q[2]*p[2], -q[1]*p[0], -q[1]*p[1], -q[1]*p[2]])
-            A.append([q[2]*p[0], q[2]*p[1], q[2]*p[2], 0, 0, 0, -q[0]*p[0], -q[0]*p[1], -q[0]*p[2]])
-        
-        _, _, Vt = np.linalg.svd(A, full_matrices=True)
-        x = Vt[-1]
+def get_corresponding_points(kp1, kp2, matches, depth1, depth2, intrinsics1, intrinsics2):
+    fx1, fy1, cx1, cy1 = intrinsics1
+    fx2, fy2, cx2, cy2 = intrinsics2
+    
+    kp1_matches = kp1[matches[:, 0]]
+    kp2_matches = kp2[matches[:, 1]]
+    
+    u1, v1 = kp1_matches[:, 0], kp1_matches[:, 1]
+    u2, v2 = kp2_matches[:, 0], kp2_matches[:, 1]
+    
+    z1 = depth1[v1.astype(int), u1.astype(int)]
+    z2 = depth2[v2.astype(int), u2.astype(int)]
+    
+    ## depth points should be greater than 0 (== 0 means depth information with no confidence)
+    valid_mask = (z1 > 0) & (z2 > 0)
+    
+    u1, v1, z1 = u1[valid_mask], v1[valid_mask], z1[valid_mask]
+    u2, v2, z2 = u2[valid_mask], v2[valid_mask], z2[valid_mask]
+    
+    x1 = (u1 - cx1) * z1 / fx1
+    y1 = (v1 - cy1) * z1 / fy1
+    x2 = (u2 - cx2) * z2 / fx2
+    y2 = (v2 - cy2) * z2 / fy2
+    
+    points1 = np.stack([x1, y1, z1], axis=-1)
+    points2 = np.stack([x2, y2, z2], axis=-1)
+    
+    return points1, points2
 
-        H = x.reshape(3, -1) / x[-1] # Normalize the last element as 1
-        return H
 
+
+def estimate_transformation_pc(proj1, proj2):
+    # Compute centroids
+    centroid_1 = np.mean(proj1, axis=0)
+    centroid_2 = np.mean(proj2, axis=0)
+    # Center the points
+    proj1_centered = proj1 - centroid_1
+    proj2_centered = proj2 - centroid_2
+    # Compute covariance matrix
+    H = proj1_centered.T @ proj2_centered
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+    R_mat = Vt.T @ U.T
+    # Handle reflection
+    if np.linalg.det(R_mat) < 0:
+        Vt[-1, :] *= -1
+        R_mat = Vt.T @ U.T
+    # Compute translation
+    t = centroid_2 - R_mat @ centroid_1
+    return R_mat, t
 
 
 # def estimate_affine_transformation_svd(proj1, proj2):
@@ -87,7 +118,7 @@ def matching_optional(desc1, desc2, threshold=0.9):
 
 
 
-def RANSAC(matches, kp1, kp2, PARAMS):
+def RANSAC(matches, points3D_1, points3D_2, PARAMS):
     
     inlier_threshold = PARAMS['RANSAC_inlier_threshold']
     max_iter = PARAMS['RANSAC_max_iter']
@@ -103,13 +134,15 @@ def RANSAC(matches, kp1, kp2, PARAMS):
         
         sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
         
-        A, t = estimate_affine_transformation_svd(kp1[sampled_matches[:, 0]], kp2[sampled_matches[:, 1]])
-
-        transformed_pts = np.dot(A, kp1.T).T + t
+        points1 = points3D_1[sampled_matches[:, 0]]
+        points2 = points3D_2[sampled_matches[:, 1]]
         
-        residuals = np.linalg.norm(transformed_pts - kp2, axis=1)
+        A, t = estimate_affine_transformation_svd(points1, points2)
         
-        inliers = matches[residuals < inlier_threshold]
+        transformed_pts = np.dot(A, points3D_1[matches[:,0]].T).T + t
+        
+        residuals = np.linalg.norm(transformed_pts - points3D_2[matches[:,1]], axis=1)
+        inliers = np.where(residuals < inlier_threshold)[0]
         
         if len(inliers) > len(best_inliers):
             best_inliers = inliers
@@ -119,7 +152,7 @@ def RANSAC(matches, kp1, kp2, PARAMS):
     return best_inliers
 
 
-def MSAC(matches, kp1, kp2, PARAMS):
+def MSAC(matches, points3D_1, points3D_2, PARAMS):
 
     max_iterations = PARAMS['MSAC_max_iter']
     threshold = PARAMS['MSAC_threshold']
@@ -140,11 +173,14 @@ def MSAC(matches, kp1, kp2, PARAMS):
         
         sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
         
-        A, t = estimate_affine_transformation_svd(kp1[sampled_matches[:, 0]], kp2[sampled_matches[:, 1]])
-        transformed_pts = np.dot(A, kp1.T).T + t
+        points1 = points3D_1[sampled_matches[:, 0]]
+        points2 = points3D_2[sampled_matches[:, 1]]
         
-        # residuals
-        residuals = np.linalg.norm(transformed_pts - kp2, axis=1)
+        A, t = estimate_affine_transformation_svd(points1, points2)
+        
+        transformed_pts = np.dot(A, points3D_1[matches[:,0]].T).T + t
+        
+        residuals = np.linalg.norm(transformed_pts - points3D_2[matches[:,1]], axis=1)
         
         # new cost function: tries to minimize the residuals
         costs = np.where(residuals < threshold, residuals**2, threshold**2)
