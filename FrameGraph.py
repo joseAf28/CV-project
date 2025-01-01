@@ -128,7 +128,7 @@ def compute_edges(nodes, PARAMS):
     distances = scipy.spatial.distance_matrix(centroids, centroids)  # Compute distance between frames
     
     ### computed edges based on the matching optional algorithm
-    for i in tqdm.tqdm(range(len(nodes), desc="Computing edges")):
+    for i in tqdm.tqdm(range(len(nodes)), desc="Computing edges"):
         nearest_neighbors = np.argsort(distances[i])[1:num_neighbors + 1]  # Exclude self (dist = 0)
         
         for j in nearest_neighbors:
