@@ -3,6 +3,7 @@ import scipy
 import algorithmsPart2 as alg
 import FrameGraphPart2 as fg
 import perspectivePart2 as pt
+import pickle
 
 
 
@@ -86,3 +87,9 @@ for node in nodes:
     print(node)
     print(node.stats)
     print()
+    
+
+
+##!  save the graph
+with open("office/graph.pkl", "wb") as f:
+    pickle.dump(nodes, f)

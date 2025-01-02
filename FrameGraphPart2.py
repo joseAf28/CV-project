@@ -10,7 +10,7 @@ import heapq
 class FrameNode:
     
     @staticmethod
-    def depth_to_point_cloud(depth, rgb, intrinsics):
+    def depth_to_points_cloud(depth, rgb, intrinsics):
         fx, fy, cx, cy = intrinsics
         
         y_indices, x_indices = np.indices(depth.shape)
@@ -21,15 +21,15 @@ class FrameNode:
         
         points = np.stack([x, y, z], axis=-1)
 
-        rgb = rgb.reshape(-1, 3)
+        rgb_mod = rgb.reshape(-1, 3)
         points = points.reshape(-1, 3)
-        points_cloud = np.concatenate([points, rgb], axis=-1)
+        points_cloud = np.concatenate([points, rgb_mod], axis=-1)
         
         return points_cloud
     
     
     @staticmethod
-    def depth_to_point3D(kp, desc, depth, intrinsics):
+    def depth_to_point3D(kp, desc, depth, rgb, intrinsics):
         fx, fy, cx, cy = intrinsics
         
         u, v = kp[:, 0], kp[:, 1]
@@ -42,18 +42,24 @@ class FrameNode:
         y = (vmod - cy) * zmod / fy
         
         
+        rgb_mod = rgb[vmod.astype(int), umod.astype(int)]
+        rgb_mod = rgb_mod.reshape(-1, 3)
+        
+        
         points = np.stack([x, y, zmod], axis=-1)
         kp_valid = kp[valid_mask]
         desc_valid = desc[valid_mask]
         
-        return points, kp_valid, desc_valid
+        
+        return points, rgb_mod, kp_valid, desc_valid
     
     
     def __init__(self, frame_id, keypoints, descriptors, depth_points, rgb_image, intrinsics):
         self.frame_id = frame_id
         
-        points_3D, kp_valid, desc_valid = FrameNode.depth_to_point3D(keypoints, descriptors, depth_points, intrinsics)
+        points_cloud = FrameNode.depth_to_points_cloud(depth_points, rgb_image, intrinsics)
         
+        points_3D, colors_3D, kp_valid, desc_valid = FrameNode.depth_to_point3D(keypoints, descriptors, depth_points, rgb_image, intrinsics)
         
         self.kp = kp_valid
         self.desc = desc_valid
@@ -67,6 +73,10 @@ class FrameNode:
         self.intrinsics = intrinsics
         
         self.points_3D = points_3D
+        self.colors_3D = colors_3D
+        
+        self.points_cloud = points_cloud
+        
 
         
         self.inliers = {}       # key: frame_id, value: inliers
@@ -165,7 +175,11 @@ def compute_edges(nodes, PARAMS):
             if i != j:                
                 
                 matches = alg.matching_optional(nodes[i].desc, nodes[j].desc, match_threshold)
+                
+                print("Matches: ", matches.shape)
+                
                 best_inliers = alg.MSAC(matches, nodes[i].points_3D, nodes[j].points_3D, PARAMS)
+                
                 
                 ##! Check if there are enough inliers
                 if len(best_inliers) < best_inliers_threshold:
@@ -240,7 +254,7 @@ def compute_edges(nodes, PARAMS):
 
 #############! Search in the graph to find the best path
 
-
+### Not changes here
 
 def dijkstra(graph, start_node, end_node):
 
@@ -275,12 +289,12 @@ def cost_function(stats, max_tuple):
     return value
 
 
-def compute_composite_homographies(nodes, PARAMS):
+def compute_composite_transformations(nodes, PARAMS):
     
     reference_index = PARAMS['node_reference_index']
     
     num_nodes = len(nodes)
-    composite_homographies = {reference_index: np.eye(3)}  
+    composite_T = {reference_index: np.eye(4)}  
     
     path_lengths = np.zeros(num_nodes)
     path_costs = np.zeros(num_nodes)
@@ -303,7 +317,7 @@ def compute_composite_homographies(nodes, PARAMS):
         graph[i] = transitions
     
     
-    pbar = tqdm.tqdm(total=num_nodes, desc="Computing composite homographies")
+    pbar = tqdm.tqdm(total=num_nodes, desc="Computing composite transformations")
     for node_id in range(num_nodes):
         
         pbar.update(1)
@@ -320,19 +334,25 @@ def compute_composite_homographies(nodes, PARAMS):
             j = node_id - 1
             i1 = node_id
             
-            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, PARAMS['match_threshold'])
-            best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints, PARAMS)
             
-            kp1 = nodes[i1].keypoints[best_inliers[:, 0]]
-            kp2 = nodes[j].keypoints[best_inliers[:, 1]]
+            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            best_inliers = alg.RANSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
                 
-            H = alg.getPerspectiveTransform(kp1, kp2)
-            H_inv = alg.getPerspectiveTransform(kp2, kp1)
+            ##! Check if there are enough inliers
+            if len(best_inliers) < best_inliers_threshold:
+                continue
+                
+            points1 = nodes[i1].points_3D[best_inliers[:, 0]]
+            points2 = nodes[j].points_3D[best_inliers[:, 1]]
+                
+            A, t = alg.estimate_affine_transformation_svd(points1, points2)
+            Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
+                
+            stats = compute_stats(matches, points1, points2, A, t)
+                
+            nodes[i1].add_connection(j, best_inliers, A, t, stats)
+            nodes[j].add_connection(i1, best_inliers, Ainv, tinv, stats)
             
-            stats = compute_stats(matches, kp1, kp2, H)
-            
-            nodes[i1].add_connection(j, best_inliers, H, stats)
-            nodes[j].add_connection(i1, best_inliers, H_inv, stats)
             
             graph[i1].append((j, cost_function(stats, max_tuple)))
             
@@ -341,22 +361,51 @@ def compute_composite_homographies(nodes, PARAMS):
         
         path.reverse()
         
+        print("Path: ", path, "Cost: ", cost, "Node: ", node_id)
+        
         path_lengths[node_id] = len(path)
         path_costs[node_id] = cost
         
-        H = np.identity(3, dtype=np.float64)
+        A_path = np.eye(3, dtype=np.float64)
+        t_path = np.zeros((3, 1), dtype=np.float64)
+        
+        
+        T_tensor = np.eye(4, dtype=np.float64)
+        
+        print(len(path))
         
         for i in range(len(path) - 1):
             src = path[i]
             dst = path[i + 1]
             
-            H = np.dot(H, nodes[dst].connections[src])
-            H /= H[2, 2]
+            A, t = nodes[dst].connections[src]
+            
+            print("A: ", A)
+            print("t: ", t)
+            
+            T_tensor_aux = np.zeros((4, 4), dtype=np.float64)
+            T_tensor_aux[:3, :3] = A
+            T_tensor_aux[:3, 3] = t.flatten()
+            T_tensor_aux[3, 3] = 1.0
+            
+            T_tensor = np.dot(T_tensor, T_tensor_aux)
         
-        composite_homographies[node_id] = H
+        
+        print("T_tensor: ", T_tensor)
+        composite_T[node_id] = T_tensor
+        
+        # H = np.identity(3, dtype=np.float64)
+        
+        # for i in range(len(path) - 1):
+        #     src = path[i]
+        #     dst = path[i + 1]
+            
+        #     H = np.dot(H, nodes[dst].connections[src])
+        #     H /= H[2, 2]
+        
+        # composite_homographies[node_id] = H
     
-    
-    return composite_homographies, path_lengths, path_costs, graph
+    return composite_T, path_lengths, path_costs, graph
 
 
 
@@ -376,4 +425,4 @@ def plot_graph(graph):
     nx.draw(G, pos, with_labels=True, node_size=200, node_color='skyblue', font_size=8, font_color='darkblue')
     labels = nx.get_edge_attributes(G, 'weight')
     # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='black', font_size=3)
-    plt.savefig("volley/graph.png")
+    plt.savefig("office/graph.png")
