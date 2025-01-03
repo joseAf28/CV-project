@@ -77,13 +77,10 @@ class FrameNode:
         
         self.points_cloud = points_cloud
         
-
         
         self.inliers = {}       # key: frame_id, value: inliers
         self.stats = {}         # key: frame_id, value: stats
         self.connections = {}   # key: frame_id, value: (R, T)
-    
-
     
     
     def __repr__(self):
@@ -174,7 +171,10 @@ def compute_edges(nodes, PARAMS):
         for j in nearest_neighbors:
             if i != j:                
                 
-                matches = alg.matching_optional(nodes[i].desc, nodes[j].desc, match_threshold)
+                # matches = alg.matching_optional(nodes[i].desc, nodes[j].desc, match_threshold)
+                
+                # matches = alg.cross_check_matching(nodes[i].desc, nodes[j].desc)
+                matches = alg.hybrid_matching(nodes[i].desc, nodes[j].desc)
                 
                 print("Matches: ", matches.shape)
                 
@@ -191,6 +191,20 @@ def compute_edges(nodes, PARAMS):
                 A, t = alg.estimate_affine_transformation_svd(points1, points2)
                 Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
                 
+                
+                T = np.eye(4)
+                T[:3, :3] = A
+                T[:3, 3] = t.flatten()
+                
+                A, t = alg.iterative_closest_point(points1, points2, T)
+                
+                Tinv = np.eye(4)
+                Tinv[:3, :3] = Ainv 
+                Tinv[:3, 3] = tinv.flatten()
+                
+                Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
+                
+                
                 stats = compute_stats(matches, points1, points2, A, t)
                 
                 nodes[i].add_connection(j, best_inliers, A, t, stats)
@@ -204,9 +218,16 @@ def compute_edges(nodes, PARAMS):
             j = i-1
             i1 = i
             
-            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            # matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            
+            # matches = alg.cross_check_matching(nodes[i1].desc, nodes[j].desc)
+            
+            matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
+            
             best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
-                
+            
+            print("Best inliers: ", best_inliers.shape)
+            
             ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
                 continue
@@ -216,7 +237,21 @@ def compute_edges(nodes, PARAMS):
                 
             A, t = alg.estimate_affine_transformation_svd(points1, points2)
             Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
+            
+            
+            T = np.eye(4)
+            T[:3, :3] = A
+            T[:3, 3] = t.flatten()
                 
+            A, t = alg.iterative_closest_point(points1, points2, T)
+                
+            Tinv = np.eye(4)
+            Tinv[:3, :3] = Ainv 
+            Tinv[:3, 3] = tinv.flatten()
+                
+            Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
+            
+            
             stats = compute_stats(matches, points1, points2, A, t)
                 
             nodes[i1].add_connection(j, best_inliers, A, t, stats)
@@ -229,9 +264,16 @@ def compute_edges(nodes, PARAMS):
             j = reference_index
             i1 = i
             
-            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            # matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
+            
+            # matches = alg.cross_check_matching(nodes[i1].desc, nodes[j].desc)
+            
+            matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
+            
             best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
-                
+            
+            print("Best inliers: ", best_inliers.shape)
+            
             ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
                 continue
@@ -241,7 +283,22 @@ def compute_edges(nodes, PARAMS):
                 
             A, t = alg.estimate_affine_transformation_svd(points1, points2)
             Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
+            
+            
+            T = np.eye(4)
+            T[:3, :3] = A
+            T[:3, 3] = t.flatten()
                 
+            A, t = alg.iterative_closest_point(points1, points2, T)
+                
+            Tinv = np.eye(4)
+            Tinv[:3, :3] = Ainv 
+            Tinv[:3, 3] = tinv.flatten()
+                
+            Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
+            
+            
+            
             stats = compute_stats(matches, points1, points2, A, t)
                 
             nodes[i1].add_connection(j, best_inliers, A, t, stats)

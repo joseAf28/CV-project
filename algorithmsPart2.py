@@ -1,8 +1,6 @@
 import numpy as np
 import scipy 
-
-
-## getting homography algorithm
+from scipy.spatial import KDTree
 
 
 def get_corresponding_points(kp1, kp2, matches, depth1, depth2, intrinsics1, intrinsics2):
@@ -35,33 +33,34 @@ def get_corresponding_points(kp1, kp2, matches, depth1, depth2, intrinsics1, int
     return points1, points2
 
 
-
-# def estimate_transformation_pc(proj1, proj2):
-
-
+##! Rigid transformation, seems the best
 def estimate_affine_transformation_svd(proj1, proj2):
-    # Compute centroids
+    
     centroid_1 = np.mean(proj1, axis=0)
     centroid_2 = np.mean(proj2, axis=0)
-    # Center the points
+    
     proj1_centered = proj1 - centroid_1
     proj2_centered = proj2 - centroid_2
-    # Compute covariance matrix
+    
     H = proj1_centered.T @ proj2_centered
-    # SVD
+    
     U, S, Vt = np.linalg.svd(H)
     R_mat = Vt.T @ U.T
+    
     # Handle reflection
     if np.linalg.det(R_mat) < 0:
         Vt[-1, :] *= -1
         R_mat = Vt.T @ U.T
-    # Compute translation
+    
+    
     t = centroid_2 - R_mat @ centroid_1
     return R_mat, t
 
 
+##! COmputing with the scale factor does not work, the similarity transformation does not work
 # def estimate_affine_transformation_svd(proj1, proj2):
     
+#     ### var_source gives zero, it does not work
     
 #     if proj1.shape != proj2.shape:
 #         raise ValueError("Source and destination points must have the same shape.")
@@ -94,15 +93,24 @@ def estimate_affine_transformation_svd(proj1, proj2):
         
     
 #     var_source = np.var(proj1_centered, axis=0).sum()
+    
+    
+    
+#     print("var_source: ", var_source)
+#     print("D: ", np.diag(D))
+    
 #     s = np.trace(np.diag(D)) / var_source
+    
+#     print("s: ", s)
     
 #     # Compute translation
 #     t = centroid_2 - s * R @ centroid_1
 #     return s * R, t
 
 
+##! General Affine Transformation does not work
 # def estimate_affine_transformation_svd(src, dst):
-### very bad result in practice
+# ## very bad result in practice
 #     ### Estimate affine transformation (rotation, translation, shearing)
 #     ### that maps src to dst using SVD.
 
@@ -166,6 +174,49 @@ def matching_optional(desc1, desc2, threshold=0.9):
     matches = np.column_stack((np.where(condition)[0], first_min_indices[condition]))
     
     return matches
+
+
+
+def ratio_test_matching(source_descriptors, target_descriptors, ratio=0.75):
+
+    tree = KDTree(target_descriptors)
+    distances, indices = tree.query(source_descriptors, k=2)
+    
+    good_matches = []
+    for i in range(len(source_descriptors)):
+        if distances[i][0] < ratio * distances[i][1]:
+            good_matches.append((i, indices[i][0]))
+    return good_matches
+
+
+def mutual_nearest_neighbor_matching(source_descriptors, target_descriptors):
+
+    tree_target = KDTree(target_descriptors)
+    distances_st, indices_st = tree_target.query(source_descriptors, k=1)
+    
+    tree_source = KDTree(source_descriptors)
+    distances_ts, indices_ts = tree_source.query(target_descriptors, k=1)
+    
+    mutual_matches = []
+    for src_idx, tgt_idx in enumerate(indices_st):
+        if indices_ts[tgt_idx] == src_idx:
+            mutual_matches.append((src_idx, tgt_idx))
+    
+    return mutual_matches
+
+
+def hybrid_matching(source_descriptors, target_descriptors, ratio=0.9):
+    ###Combines Lowe's Ratio Test with Mutual Nearest Neighbors.
+    
+    ratio_matches = ratio_test_matching(source_descriptors, target_descriptors, ratio=ratio)
+    
+    ratio_match_set = set(ratio_matches)
+    
+    mutual_matches = set(mutual_nearest_neighbor_matching(source_descriptors, target_descriptors))
+    
+    hybrid_matches = list(ratio_match_set.intersection(mutual_matches))
+    
+    return np.array(hybrid_matches)
 
 
 
@@ -255,3 +306,62 @@ def MSAC(matches, points3D_1, points3D_2, PARAMS):
 
     return best_inliers
 
+
+
+##### Implement ICP algorithm
+
+def apply_transformation(points, transformation):
+
+    num_points = points.shape[0]
+    homogeneous_points = np.hstack((points, np.ones((num_points, 1))))
+    
+    transformed_homogeneous = (transformation @ homogeneous_points.T).T
+    transformed_points = transformed_homogeneous[:, :3]
+    
+    return transformed_points
+
+
+def find_closest_points(source, target):
+    tree = KDTree(target)
+    distances, indices = tree.query(source, k=1)
+    return distances, indices
+
+
+
+def iterative_closest_point(source_points, target_points, initial_transformation=np.eye(4),
+                            max_iterations=50, tolerance=1e-5):
+    ### Performs Iterative Closest Point (ICP) to refine the transformation.
+
+    transformation = initial_transformation.copy()
+    
+    transformed_source = apply_transformation(source_points, transformation)
+    
+    prev_error = float('inf')
+    for i in range(max_iterations):
+        
+        distances, indices = find_closest_points(transformed_source, target_points)
+    
+        corresponding_target = target_points[indices]
+        
+        R, t = estimate_affine_transformation_svd(transformed_source, corresponding_target)
+        
+        delta_transformation = np.eye(4)
+        delta_transformation[:3, :3] = R
+        delta_transformation[:3, 3] = t
+        
+        transformation = delta_transformation @ transformation
+        
+        transformed_source = apply_transformation(source_points, transformation)
+        
+        mean_error = np.mean(distances)
+        # print(f"Iteration {i+1}: Mean Error = {mean_error}")
+        
+        # Check for convergence
+        if abs(prev_error - mean_error) < tolerance:
+            # print("Convergence reached.")
+            break
+        prev_error = mean_error
+    
+    A = transformation[:3, :3]
+    t = transformation[:3, 3]
+    return A, t

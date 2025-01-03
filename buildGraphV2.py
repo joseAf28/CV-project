@@ -2,7 +2,6 @@ import numpy as np
 import scipy
 import algorithmsPart2 as alg
 import FrameGraphPart2 as fg
-import perspectivePart2 as pt
 import pickle
 
 
@@ -10,13 +9,13 @@ import pickle
 PARAMS = {
     'match_threshold': 0.9,
     'edges_num_neighbors': 3,
-    'edges_inliers_threshold': 18, # 12 also works well
+    'edges_inliers_threshold': 20, # 12 also works well
     'node_reference_index': 0,
     'RANSAC_inlier_threshold': 2.0,
     'RANSAC_max_iter': 700,
-    'MSAC_max_iter': 1000,
-    'MSAC_threshold': 5.0,
-    'MSAC_confidence': 0.99,
+    'MSAC_max_iter': 1500,
+    'MSAC_threshold': 1.5,
+    'MSAC_confidence': 0.999,
 }
 
 
