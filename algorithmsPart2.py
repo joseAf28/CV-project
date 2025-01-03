@@ -356,7 +356,6 @@ def iterative_closest_point(source_points, target_points, initial_transformation
         mean_error = np.mean(distances)
         # print(f"Iteration {i+1}: Mean Error = {mean_error}")
         
-        # Check for convergence
         if abs(prev_error - mean_error) < tolerance:
             # print("Convergence reached.")
             break
