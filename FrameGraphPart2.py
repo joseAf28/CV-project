@@ -423,10 +423,6 @@ def compute_composite_transformations(nodes, PARAMS):
         path_lengths[node_id] = len(path)
         path_costs[node_id] = cost
         
-        A_path = np.eye(3, dtype=np.float64)
-        t_path = np.zeros((3, 1), dtype=np.float64)
-        
-        
         T_tensor = np.eye(4, dtype=np.float64)
         
         print(len(path))
@@ -437,9 +433,6 @@ def compute_composite_transformations(nodes, PARAMS):
             
             A, t = nodes[dst].connections[src]
             
-            print("A: ", A)
-            print("t: ", t)
-            
             T_tensor_aux = np.zeros((4, 4), dtype=np.float64)
             T_tensor_aux[:3, :3] = A
             T_tensor_aux[:3, 3] = t.flatten()
@@ -448,7 +441,7 @@ def compute_composite_transformations(nodes, PARAMS):
             T_tensor = np.dot(T_tensor, T_tensor_aux)
         
         
-        print("T_tensor: ", T_tensor)
+        # print("T_tensor: ", T_tensor)
         composite_T[node_id] = T_tensor
         
         # H = np.identity(3, dtype=np.float64)

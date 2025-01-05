@@ -177,7 +177,7 @@ def matching_optional(desc1, desc2, threshold=0.9):
 
 
 
-def ratio_test_matching(source_descriptors, target_descriptors, ratio=0.75):
+def ratio_test_matching(source_descriptors, target_descriptors, ratio=0.8):
 
     tree = KDTree(target_descriptors)
     distances, indices = tree.query(source_descriptors, k=2)
@@ -205,7 +205,7 @@ def mutual_nearest_neighbor_matching(source_descriptors, target_descriptors):
     return mutual_matches
 
 
-def hybrid_matching(source_descriptors, target_descriptors, ratio=0.9):
+def hybrid_matching(source_descriptors, target_descriptors, ratio=0.95):
     ###Combines Lowe's Ratio Test with Mutual Nearest Neighbors.
     
     ratio_matches = ratio_test_matching(source_descriptors, target_descriptors, ratio=ratio)
@@ -329,9 +329,9 @@ def find_closest_points(source, target):
 
 
 def iterative_closest_point(source_points, target_points, initial_transformation=np.eye(4),
-                            max_iterations=50, tolerance=1e-5):
+                            max_iterations=70, tolerance=1e-5):
     ### Performs Iterative Closest Point (ICP) to refine the transformation.
-
+    
     transformation = initial_transformation.copy()
     
     transformed_source = apply_transformation(source_points, transformation)
@@ -340,7 +340,7 @@ def iterative_closest_point(source_points, target_points, initial_transformation
     for i in range(max_iterations):
         
         distances, indices = find_closest_points(transformed_source, target_points)
-    
+        
         corresponding_target = target_points[indices]
         
         R, t = estimate_affine_transformation_svd(transformed_source, corresponding_target)

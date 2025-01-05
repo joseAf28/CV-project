@@ -51,7 +51,7 @@ pcd_ref.colors = o3d.utility.Vector3dVector(nodes[0].points_cloud[:, 3:])
 o3d.visualization.draw_geometries([pcd_ref], window_name="point cloud reference")
 
 
-counter = 3
+counter = 7
 
 node = nodes[counter]
 points3D = node.points_3D
@@ -76,7 +76,7 @@ T = composite_T[counter]
 points3D_transformed = np.dot(T[:3, :3], points3D.T).T + T[:3, 3]
 
 
-print("T:" , T)
+# print("T:" , T)
 
 ## apply to point cloud
 points_cloud_transformed = np.dot(T[:3, :3], points_cloud[:, :3].T).T + T[:3, 3]
@@ -93,7 +93,7 @@ pcd2_original = o3d.geometry.PointCloud()
 pcd2_original.points = o3d.utility.Vector3dVector(points_cloud[:, :3])
 pcd2_original.colors = o3d.utility.Vector3dVector(points_cloud[:, 3:])
 
-o3d.visualization.draw_geometries([pcd2_original, pcd_ref], window_name="point cloud original")
+o3d.visualization.draw_geometries([pcd2_original], window_name="point cloud original")
 
 
 pcd2 = o3d.geometry.PointCloud()

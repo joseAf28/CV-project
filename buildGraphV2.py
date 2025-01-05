@@ -13,8 +13,9 @@ PARAMS = {
     'node_reference_index': 0,
     'RANSAC_inlier_threshold': 2.0,
     'RANSAC_max_iter': 700,
+    
     'MSAC_max_iter': 1500,
-    'MSAC_threshold': 1.5,
+    'MSAC_threshold': 1.9,
     'MSAC_confidence': 0.999,
 }
 
@@ -59,7 +60,7 @@ cy = rgb_shape[0] / 2
 
 
 ### Preprocess depth
-def preprocess_depth(depth, conf, threshold=0.5):
+def preprocess_depth(depth, conf, threshold=0.4):
     
     mask = conf > threshold
     depth_filtered = np.where(mask, depth, 0)
