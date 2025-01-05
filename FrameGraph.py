@@ -154,7 +154,7 @@ def compute_edges(nodes, PARAMS):
         
         
         ###! Temporal connections to the previous frame
-        # ##? always try the homography to the previous frame
+        ##? always try the homography to the previous frame
         if i > 0 and i != reference_index and i-1 not in nearest_neighbors:
             
             j = i-1
@@ -238,10 +238,7 @@ def dijkstra(graph, start_node, end_node):
 
 
 def cost_function(stats, max_tuple):
-    
-    # alpha = 0.9
-    # beta = 0.1
-    # value = alpha * stats["mean_error"]/max_tuple[0] + beta * stats["variance_error"]/max_tuple[1]
+    mean_error_max, variance_error_max, dists_error_max = max_tuple
     
     value = stats["mean_error"]
     return value
