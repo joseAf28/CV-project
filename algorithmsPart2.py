@@ -142,8 +142,8 @@ def MSAC(matches, points3D_1, points3D_2, PARAMS):
 
     if matches.shape[0] < 4:
         return best_inliers, None
-
-
+    
+    
     while iterations < max_iterations and best_confidence < confidence:
         
         sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
