@@ -160,6 +160,10 @@ def compute_edges(nodes, PARAMS):
     f_confidence = PARAMS['f_confidence']
     f_max_iter = PARAMS['f_max_iter']
     
+    ICP_flag = PARAMS['ICP_flag']
+    ICP_max_iter = PARAMS['ICP_max_iter']
+    ICP_tolerance = PARAMS['ICP_tolerance']
+    
     ###! Similarity based connections
     centroids = []
     for node in nodes:
@@ -198,19 +202,19 @@ def compute_edges(nodes, PARAMS):
                 A, t = alg.estimate_affine_transformation_svd(points1, points2)
                 Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
                 
-                
-                T = np.eye(4)
-                T[:3, :3] = A
-                T[:3, 3] = t.flatten()
-                
-                A, t = alg.iterative_closest_point(points1, points2, T)
-                
-                Tinv = np.eye(4)
-                Tinv[:3, :3] = Ainv 
-                Tinv[:3, 3] = tinv.flatten()
-                
-                Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
-                
+                if ICP_flag:
+                    T = np.eye(4)
+                    T[:3, :3] = A
+                    T[:3, 3] = t.flatten()
+                    
+                    A, t = alg.iterative_closest_point(points1, points2, T, ICP_max_iter, ICP_tolerance)
+                    
+                    Tinv = np.eye(4)
+                    Tinv[:3, :3] = Ainv 
+                    Tinv[:3, 3] = tinv.flatten()
+                    
+                    Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv, ICP_max_iter, ICP_tolerance)
+                    
                 
                 stats = compute_stats(matches, points1, points2, A, t)
                 
@@ -244,18 +248,18 @@ def compute_edges(nodes, PARAMS):
             A, t = alg.estimate_affine_transformation_svd(points1, points2)
             Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
             
-            T = np.eye(4)
-            T[:3, :3] = A
-            T[:3, 3] = t.flatten()
+            if ICP_flag:
+                T = np.eye(4)
+                T[:3, :3] = A
+                T[:3, 3] = t.flatten()
                 
-            A, t = alg.iterative_closest_point(points1, points2, T)
+                A, t = alg.iterative_closest_point(points1, points2, T, ICP_max_iter, ICP_tolerance)
                 
-            Tinv = np.eye(4)
-            Tinv[:3, :3] = Ainv 
-            Tinv[:3, 3] = tinv.flatten()
+                Tinv = np.eye(4)
+                Tinv[:3, :3] = Ainv 
+                Tinv[:3, 3] = tinv.flatten()
                 
-            Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
-            
+                Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv, ICP_max_iter, ICP_tolerance)  
             
             stats = compute_stats(matches, points1, points2, A, t)
                 
@@ -289,19 +293,19 @@ def compute_edges(nodes, PARAMS):
             A, t = alg.estimate_affine_transformation_svd(points1, points2)
             Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
             
-            
-            T = np.eye(4)
-            T[:3, :3] = A
-            T[:3, 3] = t.flatten()
+            if ICP_flag:
+                T = np.eye(4)
+                T[:3, :3] = A
+                T[:3, 3] = t.flatten()
+                    
+                A, t = alg.iterative_closest_point(points1, points2, T, ICP_max_iter, ICP_tolerance)
+                    
+                Tinv = np.eye(4)
+                Tinv[:3, :3] = Ainv 
+                Tinv[:3, 3] = tinv.flatten()
+                    
+                Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv, ICP_max_iter, ICP_tolerance)
                 
-            A, t = alg.iterative_closest_point(points1, points2, T)
-                
-            Tinv = np.eye(4)
-            Tinv[:3, :3] = Ainv 
-            Tinv[:3, 3] = tinv.flatten()
-                
-            Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
-            
             stats = compute_stats(matches, points1, points2, A, t)
                 
             nodes[i1].add_connection(j, best_inliers, A, t, stats)
@@ -418,7 +422,7 @@ def compute_composite_transformations(nodes, PARAMS):
         
         print("Path: ", path, "Cost: ", cost, "Node: ", node_id)
         
-        path_lengths[node_id] = len(path)
+        path_lengths[node_id] = len(path)-1 if len(path) > 1 else 0
         path_costs[node_id] = cost
         
         T_tensor = np.eye(4, dtype=np.float64)

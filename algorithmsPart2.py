@@ -127,40 +127,6 @@ def hybrid_matching(source_descriptors, target_descriptors, ratio=0.99):
 
 
 
-def RANSAC(matches, points3D_1, points3D_2, PARAMS):
-    
-    inlier_threshold = PARAMS['RANSAC_inlier_threshold']
-    max_iter = PARAMS['RANSAC_max_iter']
-    
-    best_inliers = []
-    
-    counter = 0
-    
-    if matches.shape[0] < 4:
-        return best_inliers, None
-    
-    while counter < max_iter:
-        
-        sampled_matches = matches[np.random.choice(matches.shape[0], 4, replace=False)]
-        
-        points1 = points3D_1[sampled_matches[:, 0]]
-        points2 = points3D_2[sampled_matches[:, 1]]
-        
-        A, t = estimate_affine_transformation_svd(points1, points2)
-        
-        transformed_pts = np.dot(A, points3D_1[matches[:,0]].T).T + t
-        
-        residuals = np.linalg.norm(transformed_pts - points3D_2[matches[:,1]], axis=1)
-        inliers = np.where(residuals < inlier_threshold)[0]
-        
-        if len(inliers) > len(best_inliers):
-            best_inliers = inliers
-        
-        counter += 1
-        
-    return best_inliers
-
-
 def MSAC(matches, points3D_1, points3D_2, PARAMS):
 
     max_iterations = PARAMS['MSAC_max_iter']
@@ -261,11 +227,10 @@ def iterative_closest_point(source_points, target_points, initial_transformation
         transformed_source = apply_transformation(source_points, transformation)
         
         mean_error = np.mean(distances)
-        # print(f"Iteration {i+1}: Mean Error = {mean_error}")
         
         if abs(prev_error - mean_error) < tolerance:
-            # print("Convergence reached.")
             break
+        
         prev_error = mean_error
     
     A = transformation[:3, :3]

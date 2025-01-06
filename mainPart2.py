@@ -18,9 +18,6 @@ PARAMS = {
     'f_confidence': 0.999,
     'f_max_iter': 10000,
     
-    'RANSAC_inlier_threshold': 2.0,
-    'RANSAC_max_iter': 700,
-    
     'MSAC_max_iter': 1900,
     'MSAC_threshold': 3.0,
     'MSAC_confidence': 0.999,
@@ -28,6 +25,10 @@ PARAMS = {
     'Cost_threshold': 0.9,
     
     'Depth_threshold': 0.75,
+    
+    'ICP_flag': True,
+    'ICP_max_iter': 70,
+    'ICP_tolerance': 1e-5,
 }
 
 
