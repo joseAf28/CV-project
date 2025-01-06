@@ -5,6 +5,7 @@ import algorithmsPart2PnP as alg
 import tqdm
 import heapq
 
+import pydegensac
 
 #############! FrameNode class
 class FrameNode:
@@ -326,7 +327,17 @@ def compute_edges(nodes, PARAMS):
             
             # matches = alg.cross_check_matching(nodes[i1].desc, nodes[j].desc)
             
-            matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
+            matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc, 0.99)
+            
+            f_threshold = 3.0       # RANSAC reprojection error threshold in pixels
+            confidence = 0.99
+            max_iter = 10000
+                
+            _, inliers_gem = pydegensac.findFundamentalMatrix(nodes[i].kp[matches[:, 0]], nodes[j].kp[matches[:, 1]], f_threshold, confidence, max_iter)
+                
+            matches = matches[inliers_gem]
+            
+            
             
             best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
             

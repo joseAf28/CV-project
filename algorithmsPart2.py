@@ -2,6 +2,8 @@ import numpy as np
 import scipy 
 from scipy.spatial import KDTree
 
+import pydegensac
+
 
 def get_corresponding_points(kp1, kp2, matches, depth1, depth2, intrinsics1, intrinsics2):
     fx1, fy1, cx1, cy1 = intrinsics1
@@ -57,108 +59,13 @@ def estimate_affine_transformation_svd(proj1, proj2):
     return R_mat, t
 
 
-##! COmputing with the scale factor does not work, the similarity transformation does not work
-# def estimate_affine_transformation_svd(proj1, proj2):
-    
-#     ### var_source gives zero, it does not work
-    
-#     if proj1.shape != proj2.shape:
-#         raise ValueError("Source and destination points must have the same shape.")
-    
-#     n_points = proj1.shape[0]
-#     if n_points < 3:
-#         raise ValueError("At least 3 points are required to compute a similarity transformation.")
-    
-    
-#     # Compute centroids
-#     centroid_1 = np.mean(proj1, axis=0)
-#     centroid_2 = np.mean(proj2, axis=0)
-    
-#     # Center the points
-#     proj1_centered = proj1 - centroid_1
-#     proj2_centered = proj2 - centroid_2
-    
-#     # Compute covariance matrix
-#     C = (proj1_centered.T @ proj2_centered) / n_points
-    
-#     # SVD
-#     U, D, Vt = np.linalg.svd(C)
-    
-#     R = U @ Vt
-    
-#     # Handle reflection
-#     if np.linalg.det(R) < 0:
-#         Vt[-1, :] *= -1
-#         R = U @ Vt
-        
-    
-#     var_source = np.var(proj1_centered, axis=0).sum()
-    
-    
-    
-#     print("var_source: ", var_source)
-#     print("D: ", np.diag(D))
-    
-#     s = np.trace(np.diag(D)) / var_source
-    
-#     print("s: ", s)
-    
-#     # Compute translation
-#     t = centroid_2 - s * R @ centroid_1
-#     return s * R, t
-
-
-##! General Affine Transformation does not work
-# def estimate_affine_transformation_svd(src, dst):
-# ## very bad result in practice
-#     ### Estimate affine transformation (rotation, translation, shearing)
-#     ### that maps src to dst using SVD.
-
-#     N = src.shape[0]
-#     if dst.shape[0] != N:
-#         raise ValueError("Point sets must have the same number of points.")
-    
-#     centroid_1 = np.mean(src, axis=0)
-#     centroid_2 = np.mean(dst, axis=0)
-    
-#     proj1_centered = src - centroid_1
-#     proj2_centered = dst - centroid_2
-    
-#     M = np.zeros((3 * N, 12))
-#     b = np.zeros((3 * N,))
-    
-#     for i in range(N):
-#         p = proj1_centered[i]
-#         q = proj2_centered[i]
-#         M[3 * i] = [p[0], p[1], p[2], 1, 0, 0, 0, 0, 0, 0, 0, 0]
-#         M[3 * i + 1] = [0, 0, 0, 0, p[0], p[1], p[2], 1, 0, 0, 0, 0]
-#         M[3 * i + 2] = [0, 0, 0, 0, 0, 0, 0, 0, p[0], p[1], p[2], 1]
-#         b[3 * i] = q[0]
-#         b[3 * i + 1] = q[1]
-#         b[3 * i + 2] = q[2]
-    
-#     U, S, Vt = np.linalg.svd(M, full_matrices=False)
-    
-#     tol=1e-9
-#     S_inv = np.diag([1 / s if s > tol else 0.0 for s in S])
-    
-#     M_pseudo_inv = Vt.T @ S_inv @ U.T
-#     x = M_pseudo_inv @ b
-    
-#     A = x[:9].reshape(3, 3)
-#     # t = x[9:]
-    
-#     t = centroid_2 - A @ centroid_1
-    
-#     return A, t
-
 
 
 
 
 ### matching algorithms
 
-def matching_optional(desc1, desc2, threshold=0.9):
+def matching_optional(desc1, desc2, threshold=0.95):
     
     ## calculate the distances between each query descriptor and each train descriptor: i -> query, j -> train
     distances = scipy.spatial.distance.cdist(desc1, desc2, 'euclidean') 
@@ -205,7 +112,7 @@ def mutual_nearest_neighbor_matching(source_descriptors, target_descriptors):
     return mutual_matches
 
 
-def hybrid_matching(source_descriptors, target_descriptors, ratio=0.95):
+def hybrid_matching(source_descriptors, target_descriptors, ratio=0.99):
     ###Combines Lowe's Ratio Test with Mutual Nearest Neighbors.
     
     ratio_matches = ratio_test_matching(source_descriptors, target_descriptors, ratio=ratio)
@@ -214,9 +121,9 @@ def hybrid_matching(source_descriptors, target_descriptors, ratio=0.95):
     
     mutual_matches = set(mutual_nearest_neighbor_matching(source_descriptors, target_descriptors))
     
-    hybrid_matches = list(ratio_match_set.intersection(mutual_matches))
+    hybrid_matches = np.array(list(ratio_match_set.intersection(mutual_matches)))
     
-    return np.array(hybrid_matches)
+    return hybrid_matches
 
 
 

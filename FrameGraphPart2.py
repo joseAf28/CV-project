@@ -4,6 +4,7 @@ from scipy.spatial import Delaunay
 import algorithmsPart2 as alg
 import tqdm
 import heapq
+import pydegensac
 
 
 #############! FrameNode class
@@ -98,12 +99,17 @@ class FrameNode:
 #############! Initialize the graph
 def initialize_graph(kp_data, depth_data, rgb_data, intrinsics_data):
     
-    kp_files = [file for file in kp_data.keys() if 'img' in file]
+    kp_files_aux = [file for file in kp_data.keys() if 'img' in file]
+    
+    
+    ###!!! Put you function, Tomas here
+    kp_files = kp_files_aux[1:] + [kp_files_aux[0]]
     
     nodes = np.zeros(len(kp_files), dtype=FrameNode)
     
     for i in range(len(kp_files)):
         
+
         kp = kp_data[kp_files[i]][0][0][0]
         desc = kp_data[kp_files[i]][0][0][1]
         
@@ -150,6 +156,9 @@ def compute_edges(nodes, PARAMS):
     match_threshold = PARAMS['match_threshold']
     best_inliers_threshold = PARAMS['edges_inliers_threshold']
     
+    f_threshold = PARAMS['f_threshold']
+    f_confidence = PARAMS['f_confidence']
+    f_max_iter = PARAMS['f_max_iter']
     
     ###! Similarity based connections
     centroids = []
@@ -171,15 +180,13 @@ def compute_edges(nodes, PARAMS):
         for j in nearest_neighbors:
             if i != j:                
                 
-                # matches = alg.matching_optional(nodes[i].desc, nodes[j].desc, match_threshold)
-                
-                # matches = alg.cross_check_matching(nodes[i].desc, nodes[j].desc)
                 matches = alg.hybrid_matching(nodes[i].desc, nodes[j].desc)
                 
-                print("Matches: ", matches.shape)
+                _, inliers_gem = pydegensac.findFundamentalMatrix(nodes[i].kp[matches[:, 0]], nodes[j].kp[matches[:, 1]], f_threshold, f_confidence, f_max_iter)
+                
+                matches = matches[inliers_gem]
                 
                 best_inliers = alg.MSAC(matches, nodes[i].points_3D, nodes[j].points_3D, PARAMS)
-                
                 
                 ##! Check if there are enough inliers
                 if len(best_inliers) < best_inliers_threshold:
@@ -218,15 +225,14 @@ def compute_edges(nodes, PARAMS):
             j = i-1
             i1 = i
             
-            # matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
-            
-            # matches = alg.cross_check_matching(nodes[i1].desc, nodes[j].desc)
-            
             matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
+            
+            _, inliers_gem = pydegensac.findFundamentalMatrix(nodes[i].kp[matches[:, 0]], nodes[j].kp[matches[:, 1]], f_threshold, f_confidence, f_max_iter)
+            
+            matches = matches[inliers_gem]
             
             best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
             
-            print("Best inliers: ", best_inliers.shape)
             
             ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
@@ -237,7 +243,6 @@ def compute_edges(nodes, PARAMS):
                 
             A, t = alg.estimate_affine_transformation_svd(points1, points2)
             Ainv, tinv = alg.estimate_affine_transformation_svd(points2, points1)
-            
             
             T = np.eye(4)
             T[:3, :3] = A
@@ -264,15 +269,15 @@ def compute_edges(nodes, PARAMS):
             j = reference_index
             i1 = i
             
-            # matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
-            
-            # matches = alg.cross_check_matching(nodes[i1].desc, nodes[j].desc)
             
             matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
             
+            _, inliers_gem = pydegensac.findFundamentalMatrix(nodes[i].kp[matches[:, 0]], nodes[j].kp[matches[:, 1]], f_threshold, f_confidence, f_max_iter)
+            
+            matches = matches[inliers_gem]
+            
             best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
             
-            print("Best inliers: ", best_inliers.shape)
             
             ##! Check if there are enough inliers
             if len(best_inliers) < best_inliers_threshold:
@@ -297,21 +302,15 @@ def compute_edges(nodes, PARAMS):
                 
             Ainv, tinv = alg.iterative_closest_point(points2, points1, Tinv)
             
-            
-            
             stats = compute_stats(matches, points1, points2, A, t)
                 
             nodes[i1].add_connection(j, best_inliers, A, t, stats)
             nodes[j].add_connection(i1, best_inliers, Ainv, tinv, stats)
             
-            
     return nodes
 
 
-
 #############! Search in the graph to find the best path
-
-### Not changes here
 
 def dijkstra(graph, start_node, end_node):
 
@@ -384,6 +383,8 @@ def compute_composite_transformations(nodes, PARAMS):
         
         path, cost = dijkstra(graph, node_id, reference_index)   
         
+        print("Path: ", path, "Cost: ", cost, "Node: ", node_id)
+        
         ##! In case of no path, enforce connection to the previous frame
         if path is None:
             
@@ -391,14 +392,10 @@ def compute_composite_transformations(nodes, PARAMS):
             j = node_id - 1
             i1 = node_id
             
+            matches = alg.hybrid_matching(nodes[i1].desc, nodes[j].desc)
+            best_inliers = alg.MSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
             
-            matches = alg.matching_optional(nodes[i1].desc, nodes[j].desc, match_threshold)
-            best_inliers = alg.RANSAC(matches, nodes[i1].points_3D, nodes[j].points_3D, PARAMS)
-                
-            ##! Check if there are enough inliers
-            if len(best_inliers) < best_inliers_threshold:
-                continue
-                
+            
             points1 = nodes[i1].points_3D[best_inliers[:, 0]]
             points2 = nodes[j].points_3D[best_inliers[:, 1]]
                 
@@ -411,7 +408,8 @@ def compute_composite_transformations(nodes, PARAMS):
             nodes[j].add_connection(i1, best_inliers, Ainv, tinv, stats)
             
             
-            graph[i1].append((j, cost_function(stats, max_tuple)))
+            ##! high cost to the previous frame
+            graph[i1].append((j, 10.0))
             
             path, cost = dijkstra(graph, node_id, reference_index)
         
@@ -424,8 +422,6 @@ def compute_composite_transformations(nodes, PARAMS):
         path_costs[node_id] = cost
         
         T_tensor = np.eye(4, dtype=np.float64)
-        
-        print(len(path))
         
         for i in range(len(path) - 1):
             src = path[i]
@@ -440,20 +436,7 @@ def compute_composite_transformations(nodes, PARAMS):
             
             T_tensor = np.dot(T_tensor, T_tensor_aux)
         
-        
-        # print("T_tensor: ", T_tensor)
         composite_T[node_id] = T_tensor
-        
-        # H = np.identity(3, dtype=np.float64)
-        
-        # for i in range(len(path) - 1):
-        #     src = path[i]
-        #     dst = path[i + 1]
-            
-        #     H = np.dot(H, nodes[dst].connections[src])
-        #     H /= H[2, 2]
-        
-        # composite_homographies[node_id] = H
     
     return composite_T, path_lengths, path_costs, graph
 
@@ -468,11 +451,12 @@ def plot_graph(graph):
     G = nx.DiGraph()
     for node, transitions in graph.items():
         for neighbor, cost in transitions:
+            cost = round(cost, 2)
             G.add_edge(node, neighbor, weight=cost)
     
     plt.figure(figsize=(20, 20))
     pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_size=200, node_color='skyblue', font_size=8, font_color='darkblue')
+    nx.draw(G, pos, with_labels=True, node_size=1000, node_color='skyblue', font_size=25, font_color='darkblue')
     labels = nx.get_edge_attributes(G, 'weight')
-    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='black', font_size=3)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='blue', font_size=15)
     plt.savefig("office/graph.png")

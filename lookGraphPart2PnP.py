@@ -50,7 +50,7 @@ pcd_ref.colors = o3d.utility.Vector3dVector(nodes[0].points_cloud[:, 3:])
 o3d.visualization.draw_geometries([pcd_ref], window_name="point cloud reference")
 
 
-counter = 9
+counter = 1
 
 node = nodes[counter]
 points3D = node.points_3D

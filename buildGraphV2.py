@@ -9,13 +9,13 @@ import pickle
 PARAMS = {
     'match_threshold': 0.9,
     'edges_num_neighbors': 3,
-    'edges_inliers_threshold': 20, # 12 also works well
+    'edges_inliers_threshold': 15, # 12 also works well
     'node_reference_index': 0,
     'RANSAC_inlier_threshold': 2.0,
     'RANSAC_max_iter': 700,
     
     'MSAC_max_iter': 1500,
-    'MSAC_threshold': 1.9,
+    'MSAC_threshold': 3.0,
     'MSAC_confidence': 0.999,
 }
 
@@ -60,7 +60,7 @@ cy = rgb_shape[0] / 2
 
 
 ### Preprocess depth
-def preprocess_depth(depth, conf, threshold=0.4):
+def preprocess_depth(depth, conf, threshold=0.75):
     
     mask = conf > threshold
     depth_filtered = np.where(mask, depth, 0)
@@ -83,10 +83,10 @@ nodes = fg.initialize_graph(kp_data, depth_images_filtered, rgb_images, intrinse
 ###! compute the edges between the nodes
 nodes = fg.compute_edges(nodes, PARAMS)
 
-for node in nodes:
-    print(node)
-    print(node.stats)
-    print()
+# for node in nodes:
+#     print(node)
+#     print(node.stats)
+#     print()
     
 
 

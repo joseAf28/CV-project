@@ -7,7 +7,16 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 
 PARAMS = {
+    'match_threshold': 0.9,
+    'edges_num_neighbors': 3,
+    'edges_inliers_threshold': 20, # 12 also works well
     'node_reference_index': 0,
+    'RANSAC_inlier_threshold': 2.0,
+    'RANSAC_max_iter': 700,
+    
+    'MSAC_max_iter': 1500,
+    'MSAC_threshold': 1.9,
+    'MSAC_confidence': 0.999,
 }
 
 
@@ -43,15 +52,19 @@ fg.plot_graph(graph)
 
 
 ### pcd_ref 
+
+ref = PARAMS['node_reference_index']
+
 pcd_ref = o3d.geometry.PointCloud()
-pcd_ref.points = o3d.utility.Vector3dVector(nodes[0].points_cloud[:, :3])
-pcd_ref.colors = o3d.utility.Vector3dVector(nodes[0].points_cloud[:, 3:])
+pcd_ref.points = o3d.utility.Vector3dVector(nodes[ref].points_cloud[:, :3])
+pcd_ref.colors = o3d.utility.Vector3dVector(nodes[ref].points_cloud[:, 3:])
 
 
 o3d.visualization.draw_geometries([pcd_ref], window_name="point cloud reference")
 
 
-counter = 7
+counter = 5
+## 2 fine
 
 node = nodes[counter]
 points3D = node.points_3D
@@ -100,12 +113,30 @@ pcd2 = o3d.geometry.PointCloud()
 pcd2.points = o3d.utility.Vector3dVector(points_cloud_transformed[:, :3])
 pcd2.colors = o3d.utility.Vector3dVector(points_cloud[:, 3:])
 
-o3d.io.write_point_cloud("office/point_cloud_transformed.ply", pcd2)
-o3d.visualization.draw_geometries([pcd2, pcd_ref], window_name="point cloud transformed")
+
+### merge the point clouds
+merge_pcd = o3d.geometry.PointCloud()
+
+merge_pcd = merge_pcd + pcd_ref
+merge_pcd = merge_pcd + pcd2
+
+voxel_size = 0.02
+
+merge_pcd = merge_pcd.voxel_down_sample(voxel_size)
+
+### remove the outliers
+merge_pcd, ind = merge_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=3.0)
+
+
+# o3d.io.write_point_cloud("office/point_cloud_transformed.ply", pcd2)
+# o3d.visualization.draw_geometries([pcd2, pcd_ref], window_name="point cloud transformed")
+
+o3d.io.write_point_cloud("office/point_cloud_transformed.ply", merge_pcd)
+o3d.visualization.draw_geometries([merge_pcd], window_name="point cloud transformed")
 
 
 ### join pcd2 and pcd_ref
-pcd_ref.paint_uniform_color([0.0, 0.0, 1.0])
-pcd2.paint_uniform_color([1.0, 0.0, 0.0])
+# pcd_ref.paint_uniform_color([0.0, 0.0, 1.0])
+# pcd2.paint_uniform_color([1.0, 0.0, 0.0])
 
-o3d.visualization.draw_geometries([pcd2, pcd_ref], window_name="point cloud transformed")
+o3d.visualization.draw_geometries([pcd2, pcd_ref], window_name="point cloud transformed 2")
