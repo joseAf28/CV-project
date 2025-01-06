@@ -142,7 +142,7 @@ list_nodes = list_nodes[list_nodes != ref]
 
 print("list_nodes: ", list_nodes)
 
-
+transform_dict = {}
 for counter in list_nodes:
     
     cost = path_costs[counter]
@@ -166,6 +166,10 @@ for counter in list_nodes:
 
     merge_pcd += pcdcounter
 
+    R = T[:3, :4]  # Extract 3x4 rotation matrix
+    t = T[:3, 3]   # Extract 3x1 translation vector
+    transform_dict[f"node_{i}"] = {"R": R, "T": t}
+
 
 
 voxel_size = 0.02
@@ -174,3 +178,15 @@ merge_pcd, ind = merge_pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio
 
 o3d.io.write_point_cloud("office/point_cloud_transformed.ply", merge_pcd)
 o3d.visualization.draw_geometries([merge_pcd], window_name="point cloud transformed")
+
+
+#---------save .mat files-----------------
+#Save the merged point cloud in output.mat
+merge_points = np.asarray(merge_pcd.points)
+merge_colors = np.asarray(merge_pcd.colors)
+merged_data = {"points": merge_points, "colors": merge_colors}
+scipy.io.savemat("output.mat", merged_data)
+
+#Save the transformations in transforms.mat
+scipy.io.savemat("transforms.mat", transform_dict)
+
