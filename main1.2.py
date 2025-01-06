@@ -119,7 +119,7 @@ if __name__ == "__main__":
     #     pickle.dump(nodes, f)
     
     
-    with open("volley/graph.pkl", "rb") as f:
+    with open("graph.pkl", "rb") as f:
         nodes = pickle.load(f)
     
     ###! Compute the composite homographies
@@ -138,12 +138,18 @@ if __name__ == "__main__":
     dst = np.full((height, width, initial_image.shape[2] if initial_image.ndim == 3 else 1), 0, dtype=initial_image.dtype)
     dst = pt.warp_perspective_full(initial_image, H_cumulative, dst)
     
-    pt.matrix_to_image(dst, f"volley/images/final_mosaic0.jpg")
+    pt.matrix_to_image(dst, f"images/final_mosaic0.jpg")
 
 
     num_images = len(img_files)
 
-    H_dict = {output_folder_paths[i] : [] for i in range(len(output_folder_paths))}
+    #H_dict = {output_folder_paths[i] : [] for i in range(len(output_folder_paths))}
+
+    H_dict = {}
+    # Presumindo que você já sabe o número máximo de frames (num_images) por vídeo
+    for output_folder in output_folder_paths:
+        # Criar uma matriz vazia com dimensões (3, 3, num_images)
+        H_dict[output_folder] = np.zeros((3, 3, num_images), dtype=np.float64)
 
     for i, img_file in enumerate(tqdm.tqdm(img_files, desc="Processing images")):
         
@@ -158,14 +164,14 @@ if __name__ == "__main__":
         ##? For debugging
         img2 = pt.image_to_matrix(img_file)
         dst = pt.warp_perspective_full(img2, H_cumulative, dst)
-        pt.matrix_to_image(dst, f"volley/images/final_mosaic{i}.jpg")
+        pt.matrix_to_image(dst, f"images/final_mosaic{i}.jpg")
         
         
         ## Output Data
         
         data_xyxy, data_id = fg.load_yolo(yolo_files[i-1])
         
-        if data_xyxy is None or data_id is None:
+        if data_xyxy is None or data_id is None or data_xyxy.shape[1] != 4:
             continue
         
         
@@ -196,10 +202,20 @@ if __name__ == "__main__":
         scipy.io.savemat(os.path.join(output_dir, f"{filename}.mat"), struct_yolo)
         
         
-        H_dict[output_dir].append((H_cumulative, i))
+        #H_dict[output_dir].append((H_cumulative, i))
+        H_dict[output_dir][:, :, i - 1] = H_cumulative
         
 
-    for output_dir, H_array in H_dict.items():
+    for output_dir, H_matrix in H_dict.items():
         
-        struct_H = {"H": H_array}
+        #struct_H = {"H": H_array}
+        #scipy.io.savemat(os.path.join(output_dir, "homographies.mat"), struct_H)
+
+        #Determinar o número de frames processados efetivamente
+        Nv = np.sum(~np.all(H_matrix == 0, axis=(0, 1)))
+
+        #apenas os frames válidos
+        H_matrix_trimmed = H_matrix[:, :, :Nv]
+
+        struct_H = {"H": H_matrix_trimmed}
         scipy.io.savemat(os.path.join(output_dir, "homographies.mat"), struct_H)
