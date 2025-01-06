@@ -11,24 +11,37 @@ import os
 import glob
 
 
+PARAMS = {
+    'match_threshold': 0.25,
+    'edges_num_neighbors': 3,
+    'edges_inliers_threshold': 18, # 12 also works well
+    'node_reference_index': 0,
+    
+    'RANSAC_inlier_threshold': 2.0,
+    'RANSAC_max_iter': 700,
+    
+    'MSAC_max_iter': 1000,
+    'MSAC_threshold': 4.0,
+    'MSAC_confidence': 0.99,
+}
 
 ### load the graph
 # with open("ISRwall/input_1/graph1.pkl", "rb") as f:
 #     nodes = pickle.load(f)
 
-with open("volley/graph1.pkl", "rb") as f:
+with open("volley/graph.pkl", "rb") as f:
     nodes = pickle.load(f)
 
 
 reference_index = 0
 
 ## homographies from the reference frame to all the other frames
-composite_homographies, path_lenghts, path_costs, graph  = fg.compute_composite_homographies( nodes, reference_index=reference_index)
+composite_homographies, path_lenghts, path_costs, graph  = fg.compute_composite_homographies(nodes, PARAMS)
 
 
 ### Plot of the path lenghts
 plt.figure()
-plt.plot(path_lenghts, '.')
+plt.plot(path_lenghts[1:], '.')
 plt.xlabel("Frame index")
 plt.ylabel("Path length")
 plt.grid()
@@ -37,7 +50,7 @@ plt.savefig("volley/path_lenghts.png")
 
 ### Plot of the path lenghts
 plt.figure()
-plt.plot(path_costs, '.')
+plt.plot(path_costs[1:], '.')
 plt.xlabel("Frame index")
 plt.ylabel("Path Cost")
 plt.grid()

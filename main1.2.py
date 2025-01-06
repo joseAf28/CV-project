@@ -15,8 +15,10 @@ PARAMS = {
     'edges_num_neighbors': 3,
     'edges_inliers_threshold': 18, # 12 also works well
     'node_reference_index': 0,
+    
     'RANSAC_inlier_threshold': 2.0,
     'RANSAC_max_iter': 700,
+    
     'MSAC_max_iter': 1000,
     'MSAC_threshold': 4.0,
     'MSAC_confidence': 0.99,
@@ -26,7 +28,7 @@ PARAMS = {
 if __name__ == "__main__":
     
     ###! Read the input arguments
-    parser = argparse.ArgumentParser(description="Description of your script")
+    parser = argparse.ArgumentParser(description="Use structure: ref_dir input_dir1 output_dir1 input_dir2 output_dir2 ...")
 
     parser.add_argument('ref_dir', type=str, help='Reference directory')
     parser.add_argument('dirs', nargs='+', help='Pairs of input and output directories')
@@ -102,23 +104,23 @@ if __name__ == "__main__":
     reference_image = os.path.join(ref_dir, "img_ref.jpg")
     reference_file = os.path.join(ref_dir, "kp_ref.mat")
     
-    ##! initialize the graph: create the nodes
-    nodes = fg.initialize_graph(reference_file, kp_files)
+    # ##! initialize the graph: create the nodes
+    # nodes = fg.initialize_graph(reference_file, kp_files)
     
-    ##! compute the edges
-    nodes = fg.compute_edges(nodes, PARAMS)
-    
-    
-    ###! Save the graph
-    graph_dir = os.path.join(ref_dir, "..")
-    graph_file = os.path.join(graph_dir, "graph.pkl")
-    
-    with open(graph_file, "wb") as f:
-        pickle.dump(nodes, f)
+    # ##! compute the edges
+    # nodes = fg.compute_edges(nodes, PARAMS)
     
     
-    # with open("volley/graph.pkl", "rb") as f:
-    #     nodes = pickle.load(f)
+    # ###! Save the graph
+    # graph_dir = os.path.join(ref_dir, "..")
+    # graph_file = os.path.join(graph_dir, "graph.pkl")
+    
+    # with open(graph_file, "wb") as f:
+    #     pickle.dump(nodes, f)
+    
+    
+    with open("volley/graph.pkl", "rb") as f:
+        nodes = pickle.load(f)
     
     ###! Compute the composite homographies
     composite_homographies, path_lenghts, path_costs, graph  = fg.compute_composite_homographies(nodes, PARAMS)
@@ -190,6 +192,7 @@ if __name__ == "__main__":
         
         filename = f"yolooutput_{str(i).zfill(4)}"
         output_dir = input_output_path[yolo_files[i-1]]
+        
         scipy.io.savemat(os.path.join(output_dir, f"{filename}.mat"), struct_yolo)
         
         

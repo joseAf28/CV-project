@@ -310,7 +310,7 @@ def compute_composite_homographies(nodes, PARAMS):
         
         path.reverse()
         
-        path_lengths[node_id] = len(path)
+        path_lengths[node_id] = len(path)-1 if len(path) > 1 else 0
         path_costs[node_id] = cost
         
         H = np.identity(3, dtype=np.float64)
