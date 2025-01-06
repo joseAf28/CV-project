@@ -36,10 +36,17 @@ keypoints_files = [x for x in keypoints_files if x is not None]
 
 # keypoints_files = keypoints_files[:450]
 
-reference_index = 163
+
+### path to the reference image and the reference index
+
+reference_image = "volley/reference/img_ref.jpg"
+reference_file = "volley/reference/kp_ref.mat"
+
+
 
 ##! initialize the graph: create the nodes
-nodes = fg.initialize_graph(keypoints_files)
+nodes = fg.initialize_graph(reference_file, keypoints_files)
+reference_index = 0
 
 ##! compute the edges
 nodes = fg.compute_edges(nodes, reference_index)

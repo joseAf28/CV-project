@@ -6,4 +6,8 @@ volley/graph.pkl
 *.png
 *.jpeg
 *.gif
+<<<<<<< HEAD
  
+=======
+*.mat
+>>>>>>> a06f6de1ffc013f9536b17d560ca1316e7430357

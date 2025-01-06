@@ -11,24 +11,37 @@ import os
 import glob
 
 
+PARAMS = {
+    'match_threshold': 0.25,
+    'edges_num_neighbors': 3,
+    'edges_inliers_threshold': 18, # 12 also works well
+    'node_reference_index': 0,
+    
+    'RANSAC_inlier_threshold': 2.0,
+    'RANSAC_max_iter': 700,
+    
+    'MSAC_max_iter': 1000,
+    'MSAC_threshold': 4.0,
+    'MSAC_confidence': 0.99,
+}
 
 ### load the graph
 # with open("ISRwall/input_1/graph1.pkl", "rb") as f:
 #     nodes = pickle.load(f)
 
-with open("volley/graph1.pkl", "rb") as f:
+with open("volley/graph.pkl", "rb") as f:
     nodes = pickle.load(f)
 
 
-reference_index = 163
+reference_index = 0
 
 ## homographies from the reference frame to all the other frames
-composite_homographies, path_lenghts, path_costs  = fg.compute_composite_homographies_2('', nodes, reference_index=reference_index)
+composite_homographies, path_lenghts, path_costs, graph  = fg.compute_composite_homographies(nodes, PARAMS)
 
 
 ### Plot of the path lenghts
 plt.figure()
-plt.plot(path_lenghts, '.')
+plt.plot(path_lenghts[1:], '.')
 plt.xlabel("Frame index")
 plt.ylabel("Path length")
 plt.grid()
@@ -37,17 +50,22 @@ plt.savefig("volley/path_lenghts.png")
 
 ### Plot of the path lenghts
 plt.figure()
-plt.plot(path_costs, '.')
+plt.plot(path_costs[1:], '.')
 plt.xlabel("Frame index")
 plt.ylabel("Path Cost")
 plt.grid()
 plt.savefig("volley/path_costs.png")  
 
 
+### Plot the graph
+plt.figure()
+fg.plot_graph(graph)
+
+
 ### obtain the paths of the images
 # folder_path = "ISRwall/input_1/images"
-folder_path = "volley/input"
 
+folder_path = "volley/input"
 
 image_extension = ['*.jpg']
 mat_extenstion = ['*.mat']
@@ -76,8 +94,17 @@ for i in range(len(image_files)):
 
 image_files = [x for x in image_files if x is not None]
 
-initial_image_path = image_files[reference_index]
-images_path = image_files[0:reference_index] + image_files[reference_index+1:]
+
+### files of the reference image
+initial_image_path = "volley/reference/img_ref.jpg"
+
+# initial_image_path = image_files[reference_index]
+
+
+# images_path = image_files[0:reference_index] + image_files[reference_index+1:]
+
+images_path = image_files
+
 
 # images_path = images_path[:450]
 
@@ -86,14 +113,13 @@ width, height = (2000,1000)
 
 
 
-H_cumulative = np.eye(3)
+H_cumulative = np.eye(3, dtype=np.float64)
 
 dst = np.full((height, width, initial_image.shape[2] if initial_image.ndim == 3 else 1), 0, dtype=initial_image.dtype)
 dst = pt.warp_perspective_full(initial_image, H_cumulative, dst)
 
 pt.matrix_to_image(dst, f"volley/images/final_mosaic0.jpg")
 
-# pt.matrix_to_image(initial_image, f"images/final_mosaic0.jpg")
 
 num_images = len(images_path)
 print(len(images_path))
