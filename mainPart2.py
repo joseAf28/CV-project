@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 
 
+### Params
 
 PARAMS = {
     'match_threshold': 0.9,
