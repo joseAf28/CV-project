@@ -1,6 +1,5 @@
 import numpy as np
 import scipy
-from scipy.spatial import Delaunay
 import algorithms as alg
 import tqdm
 import heapq
@@ -326,23 +325,3 @@ def compute_composite_homographies(nodes, PARAMS):
     
     
     return composite_homographies, path_lengths, path_costs, graph
-
-
-
-
-
-import matplotlib.pyplot as plt
-import networkx as nx
-
-def plot_graph(graph):
-    G = nx.DiGraph()
-    for node, transitions in graph.items():
-        for neighbor, cost in transitions:
-            G.add_edge(node, neighbor, weight=cost)
-    
-    plt.figure(figsize=(20, 20))
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_size=200, node_color='skyblue', font_size=8, font_color='darkblue')
-    labels = nx.get_edge_attributes(G, 'weight')
-    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='black', font_size=3)
-    plt.savefig("volley/graph.png")

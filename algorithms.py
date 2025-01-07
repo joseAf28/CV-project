@@ -8,7 +8,7 @@ print_flag = False
 
 def getPerspectiveTransform(src, dst):
     if len(src) == len(dst):
-        # Make homogeneous coordiates if necessary
+        # Make homogeneous coordinates if necessary
         if src.shape[1] == 2:
             src = np.hstack((src, np.ones((len(src), 1), dtype=src.dtype)))
         if dst.shape[1] == 2:

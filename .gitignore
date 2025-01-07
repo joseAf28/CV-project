@@ -2,6 +2,9 @@ volley/graph1.pkl
 volley/graph.pkl
 *.pkl
 
+volley2/graph.pkl
+volley2/graph1.pkl
+
 *.jpg
 *.png
 *.jpeg
