@@ -12,7 +12,7 @@ def image_to_matrix(image_path):
     return img_matrix
 
 # Loads YOLO data from a directory and organizes it by object ID
-def load_yolo(directory_path):
+def load_yolo(directory_path="."):
     # Returns a dictionary with:
     # Key - object ID
     # Value - coordinates and corresponding frame number

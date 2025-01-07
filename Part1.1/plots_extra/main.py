@@ -10,7 +10,7 @@ import os
 if __name__ == "__main__":
 
     # Flags to control which parts of the code to execute
-    teste_1 = False  # Convert one camera image to Google Maps perspective
+    #teste_1 = False  # Convert one camera image to Google Maps perspective
     combined_trajectories = False  # Combine trajectories across frames
     yolo_in_gm = True # Save transformed YOLO outputs
     all_frames_in_gm = True  # Generate video frames in Google Maps perspective
@@ -21,7 +21,8 @@ if __name__ == "__main__":
     folder_name = "CTownAirport_1.1"
 
     # Load keypoint matches between the video and Google Maps image
-    data_maps = scipy.io.loadmat(f'{folder_name}/kp_gmaps.mat')
+    #data_maps = scipy.io.loadmat(f'{folder_name}/kp_gmaps.mat')
+    data_maps = scipy.io.loadmat(f'kp_gmaps.mat')
  
     data_maps_vec = data_maps['kp_gmaps']
 
@@ -38,23 +39,25 @@ if __name__ == "__main__":
     H = src.getPerspectiveTransform(pixel_coordinates, maps_coordinates)
     scipy.io.savemat('homography.mat', {'H': H})
     
-
     # Test transformation of one image to Google Maps perspective
+    """
     if teste_1:
         matrix = src.image_to_matrix(f'{folder_name}/images/img_0001.jpg')
         img_maps = src.warpPerspective2(matrix, H, (938, 1347))
-        src.matrix_to_image(img_maps,  "img_0001_in_gp.jpg")
-    
-    # Load the YOLO data
-    directory_path = f"{folder_name}/yolo"
-    track_coordinates = src.load_yolo(directory_path)
+        src.matrix_to_image(img_maps,  "img_0001_in_gp.jpg")"""
 
     # Assumed image dimensions
     card_src = (640, 352)  # Camera frame dimensions
     card_dst = (938, 1347)  # Google Maps image dimensions
-
+    
 #-----------------------------------------------------------------------------------------------
     if combined_trajectories:
+
+        # Load the YOLO data
+        #directory_path = f"{folder_name}/yolo"
+        #track_coordinates = src.load_yolo(directory_path)
+        track_coordinates = src.load_yolo()
+
         len_track_coordinates = len(track_coordinates) # Compute the length of track_coordinates
         idx_keys = track_coordinates.keys() # Extract the keys (track IDs)
         n = len(idx_keys)  # Compute the total number of keys (total unique tracks)
@@ -80,14 +83,18 @@ if __name__ == "__main__":
             image_all_combined_video += track_coordinates_one_img
 
         # Overlay trajectories on the Google Maps image
-        image_map = src.image_to_matrix(f'{folder_name}/airport_CapeTown_aerial.png')  # imagem do Google Maps
+        #image_map = src.image_to_matrix(f'{folder_name}/airport_CapeTown_aerial.png')  # imagem do Google Maps
+        image_map = src.image_to_matrix(f'airport_CapeTown_aerial.png')  # imagem do Google Maps
         mask = np.any(image_all_combined_map > 0, axis=-1)  #onde estão as trajetórias
         image_map[mask] = image_all_combined_map[mask] 
 
         # Save images
-        imageio.imwrite(f'{directory}/map_with_trajectories.jpg', image_map)
-        imageio.imwrite(f'{directory}/track_coordinates_maps_all.jpg', image_all_combined_map)
-        imageio.imwrite(f'{directory}/track_coordinates_video_all.jpg', image_all_combined_video)
+        #imageio.imwrite(f'{directory}/map_with_trajectories.jpg', image_map)
+        #imageio.imwrite(f'{directory}/track_coordinates_maps_all.jpg', image_all_combined_map)
+        #imageio.imwrite(f'{directory}/track_coordinates_video_all.jpg', image_all_combined_video)
+        imageio.imwrite(f'map_with_trajectories.jpg', image_map)
+        imageio.imwrite(f'track_coordinates_maps_all.jpg', image_all_combined_map)
+        imageio.imwrite(f'track_coordinates_video_all.jpg', image_all_combined_video)
 
 #--------------------------------------------------------------------------------------------
     if all_frames_in_gm or yolo_in_gm:
@@ -97,11 +104,13 @@ if __name__ == "__main__":
         # Process each frame in the sequence
         for frame_number in tqdm.tqdm(range(1, 360)):  
             # Load and transform the camera image to Google Maps perspective
-            matrix = src.image_to_matrix(f'{folder_name}/images/img_{frame_number:04}.jpg')
+            #atrix = src.image_to_matrix(f'{folder_name}/images/img_{frame_number:04}.jpg')
+            matrix = src.image_to_matrix(f'img_{frame_number:04}.jpg')
             frame = src.warpPerspective2(matrix, H, (938, 1347))
 
             # Load YOLO data for the current frame
-            data_yolo = scipy.io.loadmat(f"{directory_path}/yolo_{frame_number:04}.mat")
+            #data_yolo = scipy.io.loadmat(f"{directory_path}/yolo_{frame_number:04}.mat")
+            data_yolo = scipy.io.loadmat(f"yolo_{frame_number:04}.mat")
             data_yolo_id = data_yolo['id'].astype(int)
             data_yolo_xyxy = data_yolo['xyxy']
 
