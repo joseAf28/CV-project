@@ -98,30 +98,26 @@ class FrameNode:
 
 #############! Initialize the graph
 def initialize_graph(kp_data, depth_data, rgb_data, intrinsics_data):
-    
-    kp_files_aux = [file for file in kp_data.keys() if 'img' in file]
-    
-    
-    ###!!! Put you function, Tomas here
-    kp_files = kp_files_aux[1:] + [kp_files_aux[0]]
-    
+    # Extract and sort the keypoint files based on their numerical order
+    kp_files = sorted([file for file in kp_data.keys() if 'img' in file],
+                      key=lambda x: int(''.join(filter(str.isdigit, x))))
+
     nodes = np.zeros(len(kp_files), dtype=FrameNode)
     
     for i in range(len(kp_files)):
-        
-
+        # Retrieve keypoints and descriptors
         kp = kp_data[kp_files[i]][0][0][0]
         desc = kp_data[kp_files[i]][0][0][1]
         
+        # Retrieve depth, RGB, and intrinsic data
         depth = depth_data[..., i]
         rgb = rgb_data[..., i]
         intrinsics = intrinsics_data[i]
 
+        # Initialize the FrameNode
         nodes[i] = FrameNode(i, kp, desc, depth, rgb, intrinsics)
     
     return nodes
-
-
 
 
 #############! Compute the edges
