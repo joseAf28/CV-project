@@ -54,7 +54,6 @@ def estimate_affine_transformation_svd(proj1, proj2):
         Vt[-1, :] *= -1
         R_mat = Vt.T @ U.T
     
-    
     t = centroid_2 - R_mat @ centroid_1
     return R_mat, t
 

@@ -99,31 +99,30 @@ nodes = fg.compute_edges(nodes, PARAMS)
 ###! Compute the composite transformations
 composite_T, path_lenghts, path_costs, graph = fg.compute_composite_transformations(nodes, PARAMS)
 
-### Plot of the path lenghts
-plt.figure()
-plt.plot(path_lenghts, '.')
-plt.xlabel("Frame index")
-plt.ylabel("Path length")
-plt.grid()
-plt.savefig("office/path_lenghts.png")
+
+# ### Plot of the path lenghts
+# plt.figure()
+# plt.plot(path_lenghts, '.')
+# plt.xlabel("Frame index")
+# plt.ylabel("Path length")
+# plt.grid()
+# plt.savefig("office/path_lenghts.png")
 
 
-### Plot of the path lenghts
-plt.figure()
-plt.plot(path_costs, '.')
-plt.xlabel("Frame index")
-plt.ylabel("Path Cost")
-plt.grid()
-plt.savefig("office/path_costs.png")  
+# ### Plot of the path lenghts
+# plt.figure()
+# plt.plot(path_costs, '.')
+# plt.xlabel("Frame index")
+# plt.ylabel("Path Cost")
+# plt.grid()
+# plt.savefig("office/path_costs.png")  
 
 
-### Plot the graph
-plt.figure()
-fg.plot_graph(graph)
+# ### Plot the graph
+# plt.figure()
+# fg.plot_graph(graph)
 
 
-
-### pcd_ref 
 
 ref = PARAMS['node_reference_index']
 
@@ -139,8 +138,6 @@ merge_pcd += pcd_ref
 
 list_nodes = np.arange(0, len(nodes))
 list_nodes = list_nodes[list_nodes != ref]
-
-print("list_nodes: ", list_nodes)
 
 transform_dict = {}
 for counter in list_nodes:
@@ -166,18 +163,20 @@ for counter in list_nodes:
 
     merge_pcd += pcdcounter
 
-    R = T[:3, :4]  # Extract 3x4 rotation matrix
+    R = np.zeros((3, 4), dtype=np.float64)
+    R[:3, :3] = T[:3, :3]  # Extract 3x4 rotation matrix
     t = T[:3, 3]   # Extract 3x1 translation vector
+    
     transform_dict[f"node_{i}"] = {"R": R, "T": t}
 
 
-
+#---------downsample and remove outliers-----------------
 voxel_size = 0.02
 merge_pcd = merge_pcd.voxel_down_sample(voxel_size)
 merge_pcd, ind = merge_pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)
 
-o3d.io.write_point_cloud("office/point_cloud_transformed.ply", merge_pcd)
-o3d.visualization.draw_geometries([merge_pcd], window_name="point cloud transformed")
+# o3d.io.write_point_cloud("office/point_cloud_transformed.ply", merge_pcd)
+# o3d.visualization.draw_geometries([merge_pcd], window_name="point cloud transformed")
 
 
 #---------save .mat files-----------------

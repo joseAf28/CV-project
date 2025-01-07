@@ -387,8 +387,6 @@ def compute_composite_transformations(nodes, PARAMS):
         
         path, cost = dijkstra(graph, node_id, reference_index)   
         
-        print("Path: ", path, "Cost: ", cost, "Node: ", node_id)
-        
         ##! In case of no path, enforce connection to the previous frame
         if path is None:
             
@@ -420,7 +418,6 @@ def compute_composite_transformations(nodes, PARAMS):
         
         path.reverse()
         
-        print("Path: ", path, "Cost: ", cost, "Node: ", node_id)
         
         path_lengths[node_id] = len(path)-1 if len(path) > 1 else 0
         path_costs[node_id] = cost
@@ -443,24 +440,3 @@ def compute_composite_transformations(nodes, PARAMS):
         composite_T[node_id] = T_tensor
     
     return composite_T, path_lengths, path_costs, graph
-
-
-
-
-
-import matplotlib.pyplot as plt
-import networkx as nx
-
-def plot_graph(graph):
-    G = nx.DiGraph()
-    for node, transitions in graph.items():
-        for neighbor, cost in transitions:
-            cost = round(cost, 2)
-            G.add_edge(node, neighbor, weight=cost)
-    
-    plt.figure(figsize=(20, 20))
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_size=1000, node_color='skyblue', font_size=25, font_color='darkblue')
-    labels = nx.get_edge_attributes(G, 'weight')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_color='blue', font_size=15)
-    plt.savefig("office/graph.png")
