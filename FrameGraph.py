@@ -204,7 +204,6 @@ def compute_edges(nodes, PARAMS):
     return nodes
 
 
-
 #############! Search in the graph to find the best path
 
 
@@ -288,7 +287,8 @@ def compute_composite_homographies(nodes, PARAMS):
             j = node_id - 1
             i1 = node_id
             
-            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, PARAMS['match_threshold'])
+            matches = alg.matching_optional(nodes[i1].descriptors, nodes[j].descriptors, PARAMS['ransac_match_threshold'])
+            
             best_inliers = alg.RANSAC(matches, nodes[i1].keypoints, nodes[j].keypoints, PARAMS)
             
             kp1 = nodes[i1].keypoints[best_inliers[:, 0]]

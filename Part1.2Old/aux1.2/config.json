@@ -1,6 +1,0 @@
-{
-    "RANSAC": {
-        "MAX_ITERS": 1000 ,
-        "INLINE_THRESHOLD": 2.0
-    }
-}

@@ -21,7 +21,7 @@ def matrix_to_image(matrix, output_path):
 
 
 
-### vectirized version
+### vectorized version
 def warp_perspective_full(src, H, dst):
     width, height = (2000, 1000)
     
